@@ -46,6 +46,7 @@ const ChatPage: React.FC = () => {
     togglePin,
     toggleStar,
     toggleReaction,
+    loadInitialMessages,
     activeReplyTarget,
     selectedMessage,
     editingMessage,
@@ -56,6 +57,16 @@ const ChatPage: React.FC = () => {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Reload messages on user change and setup polling sync
+  useEffect(() => {
+    loadInitialMessages();
+    const interval = setInterval(() => {
+      loadInitialMessages();
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [currentUser?.id, loadInitialMessages]);
 
   // Auto-scroll to bottom on new message
   useEffect(() => {
@@ -202,7 +213,7 @@ const ChatPage: React.FC = () => {
         </div>
       )}
 
-      {/* Message Input Footer (Prominently Docked at Bottom) */}
+      {/* Message Input Footer */}
       <footer className="z-30 w-full max-w-md mx-auto bg-white/95 dark:bg-[#1E1D24]/95 backdrop-blur-md p-3 border-t border-stone-100 dark:border-stone-800 pb-safe flex-shrink-0 shadow-soft">
         <form onSubmit={handleSend} className="flex items-center gap-2">
           <button
