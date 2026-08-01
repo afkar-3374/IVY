@@ -19,7 +19,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const { activePreset } = useWallpaper();
   const isOnline = useOnlineStatus();
 
-  const isLoginPage = location.pathname === '/login';
+  // Show BottomTabBar on search, settings, info, profile views, but NOT on chat conversation or login
+  const showBottomTabBar = location.pathname !== '/login' && location.pathname !== '/chat';
 
   useEffect(() => {
     // Start periodic background queue sync
@@ -51,8 +52,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           {children}
         </main>
 
-        {/* Bottom Tab Bar Navigation (Hidden on Login Page) */}
-        {!isLoginPage && <BottomTabBar />}
+        {/* Bottom Tab Bar Navigation (Shown on Search, Settings & Info views) */}
+        {showBottomTabBar && <BottomTabBar />}
       </div>
     </div>
   );

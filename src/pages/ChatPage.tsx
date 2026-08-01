@@ -30,7 +30,7 @@ const ChatPage: React.FC = () => {
   const currentUser = useAuthStore((state) => state.user);
   const partnerUser = useAuthStore((state) => state.getPartnerProfile());
   const { subtext, partnerPresence } = usePresence();
-  const { messages, isLoadingMessages, loadMoreMessages } = useInfiniteMessages();
+  const { messages, isLoadingMessages } = useInfiniteMessages();
   const { triggerTyping } = useTyping();
   const addToast = useUIStore((state) => state.addToast);
 
@@ -92,7 +92,7 @@ const ChatPage: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
       {/* Sticky Header */}
-      <header className="sticky top-0 z-30 bg-white/90 dark:bg-[#1E1D24]/90 backdrop-blur-md px-4 py-3 border-b border-stone-100 dark:border-stone-800/80 flex items-center justify-between shadow-soft">
+      <header className="sticky top-0 z-30 bg-white/90 dark:bg-[#1E1D24]/90 backdrop-blur-md px-4 py-3 border-b border-stone-100 dark:border-stone-800/80 flex items-center justify-between shadow-soft flex-shrink-0">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/settings')}
@@ -153,7 +153,7 @@ const ChatPage: React.FC = () => {
       {/* Messages Stream Container */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-3 pb-24"
+        className="flex-1 overflow-y-auto p-4 space-y-3"
       >
         {isLoadingMessages && messages.length === 0 && (
           <div className="text-center py-4 text-xs text-stone-400">Loading messages...</div>
@@ -189,7 +189,7 @@ const ChatPage: React.FC = () => {
 
       {/* Reply Reference Banner */}
       {activeReplyTarget && (
-        <div className="bg-white/95 dark:bg-[#1E1D24]/95 px-4 py-2 border-t border-stone-200 dark:border-stone-800 flex items-center justify-between z-20">
+        <div className="bg-white/95 dark:bg-[#1E1D24]/95 px-4 py-2 border-t border-stone-200 dark:border-stone-800 flex items-center justify-between z-20 flex-shrink-0">
           <div className="border-l-2 border-[#C95565] pl-2 text-xs">
             <span className="font-bold text-[#C95565]">
               Replying to {activeReplyTarget.sender_id === currentUser?.id ? 'Yourself' : partnerDisplayName}
@@ -202,8 +202,8 @@ const ChatPage: React.FC = () => {
         </div>
       )}
 
-      {/* Message Input Footer */}
-      <footer className="fixed bottom-0 left-0 right-0 z-30 max-w-md mx-auto bg-white/95 dark:bg-[#1E1D24]/95 backdrop-blur-md p-3 border-t border-stone-100 dark:border-stone-800 pb-safe">
+      {/* Message Input Footer (Prominently Docked at Bottom) */}
+      <footer className="z-30 w-full max-w-md mx-auto bg-white/95 dark:bg-[#1E1D24]/95 backdrop-blur-md p-3 border-t border-stone-100 dark:border-stone-800 pb-safe flex-shrink-0 shadow-soft">
         <form onSubmit={handleSend} className="flex items-center gap-2">
           <button
             type="button"
