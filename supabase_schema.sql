@@ -170,8 +170,8 @@ CREATE POLICY "Presence manageable by couple" ON public.presence
 -- ------------------------------------------------------------------------------
 INSERT INTO public.profiles (id, login_id_hash, display_name, nickname, about, avatar_url, wallpaper, theme)
 VALUES 
-  ('11111111-1111-4111-a111-111111111111', '75c87e7f781db197d10006764516e87f174db9675317424683a9108c48a7ebdf', 'Afkar', 'My Princess ❤️', 'Just a boy in love. ❤️', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80', 'botanical', 'rose'),
-  ('22222222-2222-4222-a222-222222222222', '05c2a1e6ec0f80509a25b138612140a3ec6370bb073f47e30d170f2095f9c5d0', 'Princess', 'My Hero ❤️', 'You are my today and all of my tomorrows.', 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=300&q=80', 'botanical', 'rose')
+  ('11111111-1111-4111-a111-111111111111', '75c87e7f781db197d10006764516e87f174db9675317424683a9108c48a7ebdf', 'Afkar', 'My Princess ❤️', 'Just a boy in love. ❤️', '', 'botanical', 'rose'),
+  ('22222222-2222-4222-a222-222222222222', '05c2a1e6ec0f80509a25b138612140a3ec6370bb073f47e30d170f2095f9c5d0', 'Princess', 'My Hero ❤️', 'You are my today and all of my tomorrows.', '', 'botanical', 'rose')
 ON CONFLICT (login_id_hash) DO NOTHING;
 
 -- Seed Presence records

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Camera, Check } from 'lucide-react';
+import { ChevronLeft, Camera, Check, Trash2 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { Avatar } from '../components/ui/Avatar';
 import { Input } from '../components/ui/Input';
@@ -22,7 +22,35 @@ const ProfilePage: React.FC = () => {
   const [displayName, setDisplayName] = useState(currentUser?.display_name || '');
   const [about, setAbout] = useState(currentUser?.about || '');
   const [nickname, setNickname] = useState(currentUser?.nickname || '');
+  const [avatarDataUrl, setAvatarDataUrl] = useState(currentUser?.avatar_url || '');
   const [isSaving, setIsSaving] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      addToast('Image size should be less than 5MB', 'error');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (result) {
+        setAvatarDataUrl(result);
+        addToast('Avatar photo updated from device', 'success');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveAvatar = () => {
+    setAvatarDataUrl('');
+    addToast('Avatar removed', 'info');
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -30,6 +58,7 @@ const ProfilePage: React.FC = () => {
       display_name: displayName,
       about,
       nickname,
+      avatar_url: avatarDataUrl,
     });
     setIsSaving(false);
     addToast('Profile updated successfully ❤️', 'success');
@@ -52,16 +81,45 @@ const ProfilePage: React.FC = () => {
       </div>
 
       <div className="p-6 space-y-6 max-w-sm mx-auto w-full">
-        {/* Avatar Container */}
+        {/* Device Photo Avatar Upload Container */}
         <div className="flex flex-col items-center">
           <div className="relative">
-            <Avatar src={currentUser?.avatar_url} name={displayName} size="xl" />
+            <Avatar src={avatarDataUrl} name={displayName} size="xl" />
+            
+            {/* Hidden File Input for Device Photo */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarFileSelect}
+            />
+
             <button
-              onClick={() => addToast('Photo upload simulation ready ❤️', 'info')}
-              className="absolute bottom-0 right-0 p-2 bg-[#C95565] text-white rounded-full shadow-soft active-scale"
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute bottom-0 right-0 p-2.5 bg-[#C95565] text-white rounded-full shadow-soft active-scale hover:bg-[#B34757]"
+              title="Upload photo from device"
             >
               <Camera className="w-4 h-4" />
             </button>
+          </div>
+
+          <div className="flex items-center gap-3 mt-3">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="text-xs font-bold text-[#C95565] hover:underline"
+            >
+              Choose from device
+            </button>
+            {avatarDataUrl && (
+              <button
+                onClick={handleRemoveAvatar}
+                className="text-xs font-semibold text-rose-500 hover:underline flex items-center gap-1"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Remove</span>
+              </button>
+            )}
           </div>
         </div>
 

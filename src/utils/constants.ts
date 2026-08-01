@@ -9,7 +9,7 @@ export const DEFAULT_USER_1_PROFILE: UserProfile = {
   display_name: 'Afkar',
   nickname: 'My Princess ❤️',
   about: 'Just a boy in love. ❤️',
-  avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
+  avatar_url: '', // User uploads photo directly from device
   wallpaper: 'botanical',
   theme: 'rose',
   created_at: '2025-05-01T00:00:00.000Z',
@@ -22,7 +22,7 @@ export const DEFAULT_USER_2_PROFILE: UserProfile = {
   display_name: 'Princess',
   nickname: 'My Hero ❤️',
   about: 'You are my today and all of my tomorrows.',
-  avatar_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=300&q=80',
+  avatar_url: '', // User uploads photo directly from device
   wallpaper: 'botanical',
   theme: 'rose',
   created_at: '2025-05-01T00:00:00.000Z',
