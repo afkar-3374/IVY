@@ -20,10 +20,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const currentUser = useAuthStore((state) => state.user);
   const isMine = currentUser ? isMessageFromUser(message, currentUser.id) : false;
 
-  // Determine if message is a voice note (by type or base64 data header)
   const isVoiceNote =
     message.message_type === 'voice' ||
     (typeof message.content === 'string' && message.content.startsWith('data:audio/'));
+
+  const hasReactions = Boolean(message.reactions && message.reactions.length > 0);
 
   // Voice note audio player states
   const [isPlaying, setIsPlaying] = useState(false);
@@ -98,7 +99,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       initial={{ opacity: 0, y: 8, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.2 }}
-      className={`flex flex-col my-1 max-w-[85%] ${isMine ? 'ml-auto items-end' : 'mr-auto items-start'}`}
+      className={`flex flex-col relative max-w-[85%] ${
+        isMine ? 'ml-auto items-end' : 'mr-auto items-start'
+      } ${hasReactions ? 'mb-4 mt-1.5' : 'my-1'}`}
     >
       {/* Pinned / Starred Badge */}
       {(message.pinned || message.starred) && (
@@ -200,7 +203,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </div>
         )}
 
-        {/* Text Content - Render ONLY if NOT a voice note or image */}
+        {/* Text Content */}
         {!isVoiceNote && message.message_type !== 'image' && (
           <p className="whitespace-pre-wrap break-words leading-relaxed">
             {message.content}
@@ -213,22 +216,27 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           <span>{formatMessageTime(message.created_at)}</span>
           {renderStatus()}
         </div>
-      </div>
 
-      {/* Reactions Pill Badge */}
-      {message.reactions && message.reactions.length > 0 && (
-        <div
-          onClick={() => onReactionClick && onReactionClick(message)}
-          className="flex items-center gap-1 -mt-2.5 px-2 py-0.5 bg-white dark:bg-[#1E1D24] rounded-full shadow-soft border border-stone-200 dark:border-stone-700 text-xs cursor-pointer active-scale z-10"
-        >
-          {message.reactions.map((r) => (
-            <span key={r.id}>{r.emoji}</span>
-          ))}
-          {message.reactions.length > 1 && (
-            <span className="text-[10px] font-bold text-stone-500">{message.reactions.length}</span>
-          )}
-        </div>
-      )}
+        {/* Reactions Pill Badge (Anchored cleanly at bottom corner of message bubble) */}
+        {hasReactions && (
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onReactionClick) onReactionClick(message);
+            }}
+            className={`absolute -bottom-3 ${
+              isMine ? 'right-3' : 'left-3'
+            } flex items-center gap-1 px-2 py-0.5 bg-white dark:bg-[#1E1D24] rounded-full shadow-md border border-stone-200/80 dark:border-stone-700 text-xs cursor-pointer active-scale z-20`}
+          >
+            {message.reactions!.map((r) => (
+              <span key={r.id || r.emoji} className="text-xs">{r.emoji}</span>
+            ))}
+            {message.reactions!.length > 1 && (
+              <span className="text-[10px] font-bold text-stone-500">{message.reactions!.length}</span>
+            )}
+          </div>
+        )}
+      </div>
     </motion.div>
   );
 };
