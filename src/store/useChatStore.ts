@@ -11,6 +11,7 @@ interface ChatState {
   selectedMessage: Message | null;
   editingMessage: Message | null;
   searchQuery: string;
+  isRealtimeSubscribed: boolean;
 
   loadInitialMessages: () => Promise<void>;
   loadMoreMessages: () => Promise<void>;
@@ -35,6 +36,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   selectedMessage: null,
   editingMessage: null,
   searchQuery: '',
+  isRealtimeSubscribed: false,
 
   loadInitialMessages: async () => {
     set({ isLoadingMessages: true });
@@ -45,6 +47,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
       hasMoreMessages: msgs.length >= 50,
       pageOffset: 0,
     });
+
+    // Subscribe to live Supabase Realtime changes if not already subscribed
+    if (!get().isRealtimeSubscribed) {
+      set({ isRealtimeSubscribed: true });
+      chatService.subscribeToRealtimeMessages((incomingMsg) => {
+        set((state) => {
+          const exists = state.messages.some(
+            (m) => m.local_uuid === incomingMsg.local_uuid || m.id === incomingMsg.id
+          );
+          if (exists) {
+            return {
+              messages: state.messages.map((m) =>
+                m.local_uuid === incomingMsg.local_uuid || m.id === incomingMsg.id
+                  ? { ...m, ...incomingMsg }
+                  : m
+              ),
+            };
+          }
+          return { messages: [...state.messages, incomingMsg] };
+        });
+      });
+    }
   },
 
   loadMoreMessages: async () => {
@@ -82,10 +106,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
       reply_to_msg: replyRef,
     });
 
-    set((state) => ({
-      messages: [...state.messages, newMsg],
-      activeReplyTarget: null,
-    }));
+    set((state) => {
+      const exists = state.messages.some((m) => m.local_uuid === newMsg.local_uuid);
+      if (exists) {
+        return {
+          messages: state.messages.map((m) => (m.local_uuid === newMsg.local_uuid ? newMsg : m)),
+          activeReplyTarget: null,
+        };
+      }
+      return {
+        messages: [...state.messages, newMsg],
+        activeReplyTarget: null,
+      };
+    });
   },
 
   editMessage: async (localUuid, newContent) => {
