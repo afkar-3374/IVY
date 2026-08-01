@@ -73,24 +73,29 @@ export class ChatService {
       }
 
       if (data) {
-        return data.map((item) => ({
-          id: item.id,
-          local_uuid: item.local_uuid || item.id,
-          sender_id: item.sender_id,
-          receiver_id: item.receiver_id || '',
-          content: item.content,
-          message_type: item.message_type || 'text',
-          reply_to: item.reply_to,
-          edited: item.edited || false,
-          deleted: item.deleted || false,
-          pinned: item.pinned || false,
-          starred: item.starred || false,
-          forwarded: item.forwarded || false,
-          status: 'Sent',
-          created_at: item.created_at,
-          updated_at: item.updated_at || item.created_at,
-          reactions: []
-        }));
+        return data.map((item) => {
+          const isAudioData = typeof item.content === 'string' && item.content.startsWith('data:audio/');
+          const resolvedType: MessageType = isAudioData ? 'voice' : (item.message_type || 'text');
+
+          return {
+            id: item.id,
+            local_uuid: item.local_uuid || item.id,
+            sender_id: item.sender_id,
+            receiver_id: item.receiver_id || '',
+            content: item.content,
+            message_type: resolvedType,
+            reply_to: item.reply_to,
+            edited: item.edited || false,
+            deleted: item.deleted || false,
+            pinned: item.pinned || false,
+            starred: item.starred || false,
+            forwarded: item.forwarded || false,
+            status: 'Sent',
+            created_at: item.created_at,
+            updated_at: item.updated_at || item.created_at,
+            reactions: []
+          };
+        });
       }
     } catch (err) {
       logger.error('Error fetching messages directly from Supabase:', err);
@@ -113,13 +118,16 @@ export class ChatService {
     const localUuid = generateLocalUuid();
     const now = new Date().toISOString();
 
+    const isAudioData = typeof params.content === 'string' && params.content.startsWith('data:audio/');
+    const resolvedType: MessageType = isAudioData ? 'voice' : (params.message_type || 'text');
+
     const newMessage: Message = {
       id: localUuid,
       local_uuid: localUuid,
       sender_id: params.sender_id,
       receiver_id: params.receiver_id,
       content: params.content,
-      message_type: params.message_type || 'text',
+      message_type: resolvedType,
       reply_to: params.reply_to,
       reply_to_msg: params.reply_to_msg,
       edited: false,
@@ -141,7 +149,7 @@ export class ChatService {
         sender_id: params.sender_id,
         receiver_id: params.receiver_id,
         content: params.content,
-        message_type: params.message_type || 'text',
+        message_type: resolvedType,
         status: 'sent'
       };
 
@@ -191,13 +199,16 @@ export class ChatService {
           logger.info('Supabase Realtime event:', payload.eventType, payload.new);
           const item = payload.new as any;
           if (item && item.content) {
+            const isAudioData = typeof item.content === 'string' && item.content.startsWith('data:audio/');
+            const resolvedType: MessageType = isAudioData ? 'voice' : (item.message_type || 'text');
+
             const msg: Message = {
               id: item.id,
               local_uuid: item.local_uuid || item.id,
               sender_id: item.sender_id,
               receiver_id: item.receiver_id || '',
               content: item.content,
-              message_type: item.message_type || 'text',
+              message_type: resolvedType,
               reply_to: item.reply_to,
               edited: item.edited || false,
               deleted: item.deleted || false,

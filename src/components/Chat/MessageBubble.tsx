@@ -20,6 +20,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const currentUser = useAuthStore((state) => state.user);
   const isMine = currentUser ? isMessageFromUser(message, currentUser.id) : false;
 
+  // Determine if message is a voice note (by type or base64 data header)
+  const isVoiceNote =
+    message.message_type === 'voice' ||
+    (typeof message.content === 'string' && message.content.startsWith('data:audio/'));
+
   // Voice note audio player states
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -27,11 +32,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    if (audioRef.current) {
+    if (isVoiceNote && audioRef.current) {
       const audio = audioRef.current;
       const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
-      const handleLoadedMetadata = () => setDuration(audio.duration || 0);
-      const handleEnded = () => setIsPlaying(false);
+      const handleLoadedMetadata = () => {
+        if (audio.duration && isFinite(audio.duration)) {
+          setDuration(audio.duration);
+        }
+      };
+      const handleEnded = () => {
+        setIsPlaying(false);
+        setCurrentTime(0);
+      };
 
       audio.addEventListener('timeupdate', handleTimeUpdate);
       audio.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -43,7 +55,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         audio.removeEventListener('ended', handleEnded);
       };
     }
-  }, [message.content]);
+  }, [isVoiceNote, message.content]);
 
   const togglePlayAudio = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -53,12 +65,15 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       audioRef.current.pause();
       setIsPlaying(false);
     } else {
-      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+      audioRef.current
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch(() => setIsPlaying(false));
     }
   };
 
   const formatSeconds = (sec: number) => {
-    if (isNaN(sec) || !isFinite(sec)) return '0:00';
+    if (isNaN(sec) || !isFinite(sec) || sec <= 0) return '0:00';
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
@@ -122,9 +137,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         )}
 
         {/* Voice Note Interactive Player */}
-        {message.message_type === 'voice' && !message.deleted && (
+        {isVoiceNote && !message.deleted && (
           <div className="flex items-center gap-3 py-1 min-w-[200px]">
-            <audio ref={audioRef} src={message.content} preload="metadata" />
+            <audio ref={audioRef} src={message.content} preload="auto" />
             <button
               onClick={togglePlayAudio}
               className="w-9 h-9 rounded-full bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-soft active-scale"
@@ -155,7 +170,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               </div>
               <div className="flex items-center justify-between text-[10px] font-semibold text-stone-500 dark:text-stone-400">
                 <span>{formatSeconds(currentTime)}</span>
-                <span>{duration ? formatSeconds(duration) : '0:18'}</span>
+                <span>{duration > 0 ? formatSeconds(duration) : '0:05'}</span>
               </div>
             </div>
           </div>
@@ -185,8 +200,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </div>
         )}
 
-        {/* Text Content */}
-        {message.message_type !== 'voice' && message.message_type !== 'image' && (
+        {/* Text Content - Render ONLY if NOT a voice note or image */}
+        {!isVoiceNote && message.message_type !== 'image' && (
           <p className="whitespace-pre-wrap break-words leading-relaxed">
             {message.content}
           </p>
