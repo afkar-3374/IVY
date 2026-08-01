@@ -7,6 +7,7 @@ import { generateLocalUuid } from '../utils/message';
 import { DEFAULT_USER_1_PROFILE, DEFAULT_USER_2_PROFILE, USER_1_ID, USER_2_ID } from '../utils/constants';
 import type { Message, UserProfile, MessageReaction, MessageType } from '../types';
 
+// Cross-tab broadcast channel for local multi-tab testing
 const broadcastChannel = typeof window !== 'undefined' && 'BroadcastChannel' in window
   ? new BroadcastChannel('ivy_chat_channel')
   : null;
@@ -28,7 +29,6 @@ export class ChatService {
       await ivyDb.profiles.put(DEFAULT_USER_2_PROFILE);
     }
 
-    // Ensure profiles exist in Supabase DB to prevent foreign key errors
     if (supabase) {
       try {
         await supabase.from('profiles').upsert([DEFAULT_USER_1_PROFILE, DEFAULT_USER_2_PROFILE], { onConflict: 'id' });
@@ -87,9 +87,9 @@ export class ChatService {
   }
 
   /**
-   * Fetch messages live from Supabase DB (with IndexedDB fallback).
+   * Fetch messages from IndexedDB / Supabase.
    */
-  async getMessages(limit = 50, offset = 0): Promise<Message[]> {
+  async getMessages(limit = 100, offset = 0): Promise<Message[]> {
     if (supabase) {
       try {
         const { data, error } = await supabase
@@ -112,35 +112,26 @@ export class ChatService {
               pinned: item.pinned || false,
               starred: item.starred || false,
               forwarded: item.forwarded || false,
-              status: item.status || 'Sent',
+              status: 'Sent',
               created_at: item.created_at,
               updated_at: item.updated_at || item.created_at,
               reactions: []
             };
             await ivyDb.messages.put(msg);
           }
-
-          const localAll = await ivyDb.messages.orderBy('created_at').toArray();
-          const total = localAll.length;
-          const start = Math.max(0, total - limit - offset);
-          const end = total - offset;
-          return localAll.slice(start, end);
         }
       } catch (err) {
-        logger.warn('Error fetching messages from Supabase, falling back to IndexedDB:', err);
+        logger.warn('Error fetching messages from Supabase, relying on IndexedDB:', err);
       }
     }
 
-    // Fallback to IndexedDB
+    // Return messages from IndexedDB sorted by created_at
     const all = await ivyDb.messages.orderBy('created_at').toArray();
-    const total = all.length;
-    const start = Math.max(0, total - limit - offset);
-    const end = total - offset;
-    return all.slice(start, end);
+    return all;
   }
 
   /**
-   * Send message live via Supabase DB with robust payload validation & fallback.
+   * Send message with instant 'Sent' checkmark status & multi-tab broadcast.
    */
   async sendMessage(params: {
     sender_id: string;
@@ -169,22 +160,22 @@ export class ChatService {
       pinned: false,
       starred: false,
       forwarded: false,
-      status: 'Sending',
+      status: 'Sent', // Instantly advance to Sent (single checkmark)
       created_at: now,
       updated_at: now,
       reactions: []
     };
 
-    // 1. Save to IndexedDB (Optimistic UI)
+    // 1. Immediately save to IndexedDB
     await ivyDb.messages.put(newMessage);
-    logger.info('Saved optimistic message to IndexedDB', localUuid);
+    logger.info('Saved message to IndexedDB with status Sent', localUuid);
 
-    // 2. Broadcast locally across tabs
+    // 2. Broadcast to all open tabs immediately so partner sees it
     if (broadcastChannel) {
       broadcastChannel.postMessage({ type: 'NEW_MESSAGE', payload: newMessage });
     }
 
-    // 3. Post directly to Supabase DB if connected
+    // 3. Post to Supabase DB asynchronously
     if (supabase) {
       try {
         const payload: Record<string, unknown> = {
@@ -196,7 +187,6 @@ export class ChatService {
           status: 'sent'
         };
 
-        // Only attach reply_to if it's a valid UUID
         if (params.reply_to && UUID_REGEX.test(params.reply_to)) {
           payload.reply_to = params.reply_to;
         }
@@ -208,84 +198,86 @@ export class ChatService {
           .single();
 
         if (error) {
-          logger.warn('Supabase insert error details:', error.message, error.details);
-          // If foreign key constraint failed, try upserting profiles and retrying insert once
+          logger.warn('Supabase insert error details:', error.message);
           if (error.code === '23503') {
             await supabase.from('profiles').upsert([DEFAULT_USER_1_PROFILE, DEFAULT_USER_2_PROFILE]);
             const retryRes = await supabase.from('messages').insert(payload).select('id').single();
             if (!retryRes.error && retryRes.data) {
               newMessage.id = retryRes.data.id;
-              newMessage.status = 'Sent';
               await ivyDb.messages.put(newMessage);
-              logger.info('Retry insert succeeded after profile upsert!', retryRes.data.id);
-              return newMessage;
             }
           }
         } else if (data) {
           newMessage.id = data.id;
-          newMessage.status = 'Sent';
           await ivyDb.messages.put(newMessage);
-          logger.info('Message successfully saved to Supabase DB', data.id);
-          return newMessage;
+          logger.info('Message synced with Supabase DB ID', data.id);
         }
       } catch (err) {
-        logger.warn('Supabase insert exception, fallback to offline sync queue:', err);
+        logger.warn('Supabase insert exception:', err);
       }
     }
-
-    // Fallback: Enqueue for background sync queue if offline or insert failed
-    await syncQueue.enqueue('SEND_MESSAGE', newMessage as unknown as Record<string, unknown>);
-    queueProcessor.processQueue();
 
     return newMessage;
   }
 
   /**
-   * Subscribe to live Supabase Realtime changes for instant two-user message updates.
+   * Subscribe to Realtime Supabase changes & local BroadcastChannel.
    */
   subscribeToRealtimeMessages(onMessageReceived: (msg: Message) => void): () => void {
     let channel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null;
 
     if (supabase) {
-      channel = supabase
-        .channel('public:messages')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'messages' },
-          (payload) => {
-            logger.info('Realtime Supabase event received:', payload.eventType, payload.new);
-            const item = payload.new as any;
-            if (item && item.content) {
-              const msg: Message = {
-                id: item.id,
-                local_uuid: item.local_uuid || item.id,
-                sender_id: item.sender_id,
-                receiver_id: item.receiver_id || '',
-                content: item.content,
-                message_type: item.message_type || 'text',
-                reply_to: item.reply_to,
-                edited: item.edited || false,
-                deleted: item.deleted || false,
-                pinned: item.pinned || false,
-                starred: item.starred || false,
-                forwarded: item.forwarded || false,
-                status: 'Sent',
-                created_at: item.created_at || new Date().toISOString(),
-                updated_at: item.updated_at || new Date().toISOString(),
-                reactions: []
-              };
-              ivyDb.messages.put(msg);
-              onMessageReceived(msg);
+      try {
+        channel = supabase
+          .channel('public:messages')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'messages' },
+            (payload) => {
+              logger.info('Realtime Supabase event:', payload.eventType, payload.new);
+              const item = payload.new as any;
+              if (item && item.content) {
+                const msg: Message = {
+                  id: item.id,
+                  local_uuid: item.local_uuid || item.id,
+                  sender_id: item.sender_id,
+                  receiver_id: item.receiver_id || '',
+                  content: item.content,
+                  message_type: item.message_type || 'text',
+                  reply_to: item.reply_to,
+                  edited: item.edited || false,
+                  deleted: item.deleted || false,
+                  pinned: item.pinned || false,
+                  starred: item.starred || false,
+                  forwarded: item.forwarded || false,
+                  status: 'Sent',
+                  created_at: item.created_at || new Date().toISOString(),
+                  updated_at: item.updated_at || new Date().toISOString(),
+                  reactions: []
+                };
+                ivyDb.messages.put(msg);
+                onMessageReceived(msg);
+              }
             }
-          }
-        )
-        .subscribe();
+          )
+          .subscribe();
+      } catch (err) {
+        logger.warn('Error subscribing to Supabase Realtime channel:', err);
+      }
     }
 
-    // BroadcastChannel listener for multi-tab local updates
+    // BroadcastChannel listener for local multi-tab sync
     const handleBroadcast = (e: MessageEvent) => {
       if (e.data && e.data.type === 'NEW_MESSAGE') {
-        onMessageReceived(e.data.payload as Message);
+        const msg = e.data.payload as Message;
+        ivyDb.messages.put(msg);
+        onMessageReceived(msg);
+      } else if (e.data && e.data.type === 'MESSAGE_EDITED') {
+        this.getMessages().then((msgs) => {
+          if (msgs.length > 0 && msgs[msgs.length - 1]) {
+            onMessageReceived(msgs[msgs.length - 1]);
+          }
+        });
       }
     };
 
@@ -314,6 +306,10 @@ export class ChatService {
       msg.edited_at = new Date().toISOString();
       await ivyDb.messages.put(msg);
 
+      if (broadcastChannel) {
+        broadcastChannel.postMessage({ type: 'MESSAGE_EDITED', payload: { localUuid, newContent } });
+      }
+
       if (supabase) {
         try {
           await supabase
@@ -321,13 +317,8 @@ export class ChatService {
             .update({ content: newContent, edited: true, edited_at: new Date().toISOString() })
             .eq('local_uuid', localUuid);
         } catch (err) {
-          logger.warn('Supabase edit failed, queuing action:', err);
-          await syncQueue.enqueue('EDIT_MESSAGE', { local_uuid: localUuid, content: newContent });
-          queueProcessor.processQueue();
+          logger.warn('Supabase edit error:', err);
         }
-      } else {
-        await syncQueue.enqueue('EDIT_MESSAGE', { local_uuid: localUuid, content: newContent });
-        queueProcessor.processQueue();
       }
     }
   }
@@ -343,6 +334,10 @@ export class ChatService {
       msg.content = 'This message was deleted.';
       await ivyDb.messages.put(msg);
 
+      if (broadcastChannel) {
+        broadcastChannel.postMessage({ type: 'MESSAGE_DELETED', payload: { localUuid } });
+      }
+
       if (supabase) {
         try {
           await supabase
@@ -350,13 +345,8 @@ export class ChatService {
             .update({ deleted: true, deleted_at: new Date().toISOString(), content: 'This message was deleted.' })
             .eq('local_uuid', localUuid);
         } catch (err) {
-          logger.warn('Supabase delete failed, queuing action:', err);
-          await syncQueue.enqueue('DELETE_MESSAGE', { local_uuid: localUuid });
-          queueProcessor.processQueue();
+          logger.warn('Supabase delete error:', err);
         }
-      } else {
-        await syncQueue.enqueue('DELETE_MESSAGE', { local_uuid: localUuid });
-        queueProcessor.processQueue();
       }
     }
   }
@@ -374,7 +364,7 @@ export class ChatService {
         try {
           await supabase.from('messages').update({ pinned: msg.pinned }).eq('local_uuid', localUuid);
         } catch (err) {
-          logger.warn('Supabase pin failed:', err);
+          logger.warn('Supabase pin error:', err);
         }
       }
     }
@@ -393,7 +383,7 @@ export class ChatService {
         try {
           await supabase.from('messages').update({ starred: msg.starred }).eq('local_uuid', localUuid);
         } catch (err) {
-          logger.warn('Supabase star failed:', err);
+          logger.warn('Supabase star error:', err);
         }
       }
     }
