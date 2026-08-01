@@ -57,25 +57,38 @@ export class ChatService {
   }
 
   /**
-   * Fetch all messages directly from Supabase database table `messages`.
+   * Fetch all messages and reactions directly from Supabase.
    */
   async getMessages(): Promise<Message[]> {
     if (!supabase) return [];
     try {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .order('created_at', { ascending: true });
+      // Fetch messages and reactions in parallel
+      const [{ data: msgsData, error: msgsErr }, { data: reactionsData }] = await Promise.all([
+        supabase.from('messages').select('*').order('created_at', { ascending: true }),
+        supabase.from('message_reactions').select('*')
+      ]);
 
-      if (error) {
-        logger.error('Supabase SELECT messages error:', error.message);
+      if (msgsErr) {
+        logger.error('Supabase SELECT messages error:', msgsErr.message);
         return [];
       }
 
-      if (data) {
-        return data.map((item) => {
+      if (msgsData) {
+        const allReactions = reactionsData || [];
+
+        return msgsData.map((item) => {
           const isAudioData = typeof item.content === 'string' && item.content.startsWith('data:audio/');
           const resolvedType: MessageType = isAudioData ? 'voice' : (item.message_type || 'text');
+
+          const itemReactions: MessageReaction[] = allReactions
+            .filter((r) => r.message_id === item.local_uuid || r.message_id === item.id)
+            .map((r) => ({
+              id: r.id || generateLocalUuid(),
+              message_id: r.message_id,
+              profile_id: r.profile_id,
+              emoji: r.emoji,
+              created_at: r.created_at || new Date().toISOString()
+            }));
 
           return {
             id: item.id,
@@ -93,7 +106,7 @@ export class ChatService {
             status: 'Sent',
             created_at: item.created_at,
             updated_at: item.updated_at || item.created_at,
-            reactions: []
+            reactions: itemReactions
           };
         });
       }
@@ -185,18 +198,18 @@ export class ChatService {
   }
 
   /**
-   * Subscribe directly to Supabase Realtime channel for postgres_changes on messages table.
+   * Subscribe directly to Supabase Realtime channel for messages & reactions.
    */
   subscribeToRealtimeMessages(onMessageReceived: (msg: Message) => void): () => void {
     if (!supabase) return () => {};
 
     const channel = supabase
-      .channel('public:messages')
+      .channel('public:messages_and_reactions')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'messages' },
         (payload) => {
-          logger.info('Supabase Realtime event:', payload.eventType, payload.new);
+          logger.info('Supabase Realtime message event:', payload.eventType, payload.new);
           const item = payload.new as any;
           if (item && item.content) {
             const isAudioData = typeof item.content === 'string' && item.content.startsWith('data:audio/');
@@ -222,6 +235,18 @@ export class ChatService {
             };
             onMessageReceived(msg);
           }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'message_reactions' },
+        () => {
+          // Re-fetch all messages and reactions when a reaction is added or removed
+          this.getMessages().then((msgs) => {
+            if (msgs.length > 0) {
+              onMessageReceived(msgs[msgs.length - 1]);
+            }
+          });
         }
       )
       .subscribe();
@@ -294,16 +319,34 @@ export class ChatService {
   }
 
   /**
-   * Toggle Reaction in Supabase.
+   * Toggle Reaction in Supabase (insert if new, delete if existing).
    */
   async toggleReaction(localUuid: string, userId: string, emoji: string): Promise<void> {
     if (!supabase) return;
     try {
-      await supabase.from('message_reactions').insert({
-        message_id: localUuid,
-        profile_id: userId,
-        emoji
-      });
+      const { data: existing } = await supabase
+        .from('message_reactions')
+        .select('*')
+        .eq('message_id', localUuid)
+        .eq('profile_id', userId)
+        .eq('emoji', emoji);
+
+      if (existing && existing.length > 0) {
+        await supabase
+          .from('message_reactions')
+          .delete()
+          .eq('message_id', localUuid)
+          .eq('profile_id', userId)
+          .eq('emoji', emoji);
+        logger.info('Removed reaction from Supabase:', emoji);
+      } else {
+        await supabase.from('message_reactions').insert({
+          message_id: localUuid,
+          profile_id: userId,
+          emoji
+        });
+        logger.info('Inserted reaction to Supabase:', emoji);
+      }
     } catch (err) {
       logger.error('Supabase reaction error:', err);
     }
