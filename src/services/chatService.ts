@@ -11,9 +11,12 @@ const broadcastChannel = typeof window !== 'undefined' && 'BroadcastChannel' in 
   ? new BroadcastChannel('ivy_chat_channel')
   : null;
 
+// Regex to validate standard UUID format
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export class ChatService {
   /**
-   * Seed default predefined users in Dexie if not present.
+   * Seed default predefined users in Dexie and Supabase.
    */
   async initPreseededProfiles(): Promise<void> {
     const existing1 = await ivyDb.profiles.get(USER_1_ID);
@@ -23,6 +26,16 @@ export class ChatService {
     const existing2 = await ivyDb.profiles.get(USER_2_ID);
     if (!existing2) {
       await ivyDb.profiles.put(DEFAULT_USER_2_PROFILE);
+    }
+
+    // Ensure profiles exist in Supabase DB to prevent foreign key errors
+    if (supabase) {
+      try {
+        await supabase.from('profiles').upsert([DEFAULT_USER_1_PROFILE, DEFAULT_USER_2_PROFILE], { onConflict: 'id' });
+        logger.info('Preseeded couple profiles upserted into Supabase DB');
+      } catch (err) {
+        logger.warn('Could not auto-upsert profiles to Supabase:', err);
+      }
     }
   }
 
@@ -39,6 +52,7 @@ export class ChatService {
           .select('*')
           .eq('login_id_hash', hash)
           .single();
+
         if (!error && data) {
           await ivyDb.profiles.put(data as UserProfile);
           return data as UserProfile;
@@ -83,8 +97,7 @@ export class ChatService {
           .select('*')
           .order('created_at', { ascending: true });
 
-        if (!error && data) {
-          // Cache in IndexedDB
+        if (!error && data && data.length > 0) {
           for (const item of data) {
             const msg: Message = {
               id: item.id,
@@ -127,7 +140,7 @@ export class ChatService {
   }
 
   /**
-   * Send message live via Supabase DB with Optimistic UI & Offline Queue fallback.
+   * Send message live via Supabase DB with robust payload validation & fallback.
    */
   async sendMessage(params: {
     sender_id: string;
@@ -137,6 +150,8 @@ export class ChatService {
     reply_to?: string;
     reply_to_msg?: Message['reply_to_msg'];
   }): Promise<Message> {
+    await this.initPreseededProfiles();
+
     const localUuid = generateLocalUuid();
     const now = new Date().toISOString();
 
@@ -162,7 +177,7 @@ export class ChatService {
 
     // 1. Save to IndexedDB (Optimistic UI)
     await ivyDb.messages.put(newMessage);
-    logger.info('Optimistically saved message to IndexedDB', localUuid);
+    logger.info('Saved optimistic message to IndexedDB', localUuid);
 
     // 2. Broadcast locally across tabs
     if (broadcastChannel) {
@@ -172,21 +187,41 @@ export class ChatService {
     // 3. Post directly to Supabase DB if connected
     if (supabase) {
       try {
+        const payload: Record<string, unknown> = {
+          local_uuid: localUuid,
+          sender_id: params.sender_id,
+          receiver_id: params.receiver_id,
+          content: params.content,
+          message_type: params.message_type || 'text',
+          status: 'sent'
+        };
+
+        // Only attach reply_to if it's a valid UUID
+        if (params.reply_to && UUID_REGEX.test(params.reply_to)) {
+          payload.reply_to = params.reply_to;
+        }
+
         const { data, error } = await supabase
           .from('messages')
-          .insert({
-            local_uuid: localUuid,
-            sender_id: params.sender_id,
-            receiver_id: params.receiver_id,
-            content: params.content,
-            message_type: params.message_type || 'text',
-            reply_to: params.reply_to || null,
-            status: 'sent'
-          })
+          .insert(payload)
           .select('id')
           .single();
 
-        if (!error && data) {
+        if (error) {
+          logger.warn('Supabase insert error details:', error.message, error.details);
+          // If foreign key constraint failed, try upserting profiles and retrying insert once
+          if (error.code === '23503') {
+            await supabase.from('profiles').upsert([DEFAULT_USER_1_PROFILE, DEFAULT_USER_2_PROFILE]);
+            const retryRes = await supabase.from('messages').insert(payload).select('id').single();
+            if (!retryRes.error && retryRes.data) {
+              newMessage.id = retryRes.data.id;
+              newMessage.status = 'Sent';
+              await ivyDb.messages.put(newMessage);
+              logger.info('Retry insert succeeded after profile upsert!', retryRes.data.id);
+              return newMessage;
+            }
+          }
+        } else if (data) {
           newMessage.id = data.id;
           newMessage.status = 'Sent';
           await ivyDb.messages.put(newMessage);
@@ -194,11 +229,11 @@ export class ChatService {
           return newMessage;
         }
       } catch (err) {
-        logger.warn('Supabase direct insert failed, fallback to offline queue:', err);
+        logger.warn('Supabase insert exception, fallback to offline sync queue:', err);
       }
     }
 
-    // Fallback: Enqueue for background sync queue if Supabase insert failed or offline
+    // Fallback: Enqueue for background sync queue if offline or insert failed
     await syncQueue.enqueue('SEND_MESSAGE', newMessage as unknown as Record<string, unknown>);
     queueProcessor.processQueue();
 
@@ -280,10 +315,16 @@ export class ChatService {
       await ivyDb.messages.put(msg);
 
       if (supabase) {
-        await supabase
-          .from('messages')
-          .update({ content: newContent, edited: true, edited_at: new Date().toISOString() })
-          .eq('local_uuid', localUuid);
+        try {
+          await supabase
+            .from('messages')
+            .update({ content: newContent, edited: true, edited_at: new Date().toISOString() })
+            .eq('local_uuid', localUuid);
+        } catch (err) {
+          logger.warn('Supabase edit failed, queuing action:', err);
+          await syncQueue.enqueue('EDIT_MESSAGE', { local_uuid: localUuid, content: newContent });
+          queueProcessor.processQueue();
+        }
       } else {
         await syncQueue.enqueue('EDIT_MESSAGE', { local_uuid: localUuid, content: newContent });
         queueProcessor.processQueue();
@@ -303,10 +344,16 @@ export class ChatService {
       await ivyDb.messages.put(msg);
 
       if (supabase) {
-        await supabase
-          .from('messages')
-          .update({ deleted: true, deleted_at: new Date().toISOString(), content: 'This message was deleted.' })
-          .eq('local_uuid', localUuid);
+        try {
+          await supabase
+            .from('messages')
+            .update({ deleted: true, deleted_at: new Date().toISOString(), content: 'This message was deleted.' })
+            .eq('local_uuid', localUuid);
+        } catch (err) {
+          logger.warn('Supabase delete failed, queuing action:', err);
+          await syncQueue.enqueue('DELETE_MESSAGE', { local_uuid: localUuid });
+          queueProcessor.processQueue();
+        }
       } else {
         await syncQueue.enqueue('DELETE_MESSAGE', { local_uuid: localUuid });
         queueProcessor.processQueue();
@@ -324,7 +371,11 @@ export class ChatService {
       await ivyDb.messages.put(msg);
 
       if (supabase) {
-        await supabase.from('messages').update({ pinned: msg.pinned }).eq('local_uuid', localUuid);
+        try {
+          await supabase.from('messages').update({ pinned: msg.pinned }).eq('local_uuid', localUuid);
+        } catch (err) {
+          logger.warn('Supabase pin failed:', err);
+        }
       }
     }
   }
@@ -339,7 +390,11 @@ export class ChatService {
       await ivyDb.messages.put(msg);
 
       if (supabase) {
-        await supabase.from('messages').update({ starred: msg.starred }).eq('local_uuid', localUuid);
+        try {
+          await supabase.from('messages').update({ starred: msg.starred }).eq('local_uuid', localUuid);
+        } catch (err) {
+          logger.warn('Supabase star failed:', err);
+        }
       }
     }
   }
