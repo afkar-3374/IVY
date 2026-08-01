@@ -7,12 +7,10 @@ import { generateLocalUuid } from '../utils/message';
 import { DEFAULT_USER_1_PROFILE, DEFAULT_USER_2_PROFILE, USER_1_ID, USER_2_ID } from '../utils/constants';
 import type { Message, UserProfile, MessageReaction, MessageType } from '../types';
 
-// Cross-tab broadcast channel for local multi-tab testing
 const broadcastChannel = typeof window !== 'undefined' && 'BroadcastChannel' in window
   ? new BroadcastChannel('ivy_chat_channel')
   : null;
 
-// Regex to validate standard UUID format
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class ChatService {
@@ -97,7 +95,9 @@ export class ChatService {
           .select('*')
           .order('created_at', { ascending: true });
 
-        if (!error && data && data.length > 0) {
+        if (error) {
+          logger.warn('Supabase SELECT messages error:', error.message);
+        } else if (data && data.length > 0) {
           for (const item of data) {
             const msg: Message = {
               id: item.id,
@@ -125,13 +125,13 @@ export class ChatService {
       }
     }
 
-    // Return messages from IndexedDB sorted by created_at
+    // Return all messages from IndexedDB sorted by created_at
     const all = await ivyDb.messages.orderBy('created_at').toArray();
     return all;
   }
 
   /**
-   * Send message with instant 'Sent' checkmark status & multi-tab broadcast.
+   * Send message with instant 'Sent' checkmark status & multi-channel broadcast.
    */
   async sendMessage(params: {
     sender_id: string;
@@ -160,7 +160,7 @@ export class ChatService {
       pinned: false,
       starred: false,
       forwarded: false,
-      status: 'Sent', // Instantly advance to Sent (single checkmark)
+      status: 'Sent',
       created_at: now,
       updated_at: now,
       reactions: []
@@ -170,12 +170,19 @@ export class ChatService {
     await ivyDb.messages.put(newMessage);
     logger.info('Saved message to IndexedDB with status Sent', localUuid);
 
-    // 2. Broadcast to all open tabs immediately so partner sees it
+    // 2. Broadcast via BroadcastChannel
     if (broadcastChannel) {
       broadcastChannel.postMessage({ type: 'NEW_MESSAGE', payload: newMessage });
     }
 
-    // 3. Post to Supabase DB asynchronously
+    // 3. Broadcast via LocalStorage Event (cross-window fallback)
+    try {
+      localStorage.setItem('ivy_message_event', JSON.stringify({ type: 'NEW_MESSAGE', payload: newMessage, ts: Date.now() }));
+    } catch {
+      // Ignore quota errors
+    }
+
+    // 4. Post to Supabase DB asynchronously
     if (supabase) {
       try {
         const payload: Record<string, unknown> = {
@@ -221,7 +228,7 @@ export class ChatService {
   }
 
   /**
-   * Subscribe to Realtime Supabase changes & local BroadcastChannel.
+   * Subscribe to Realtime Supabase changes, BroadcastChannel, and LocalStorage events.
    */
   subscribeToRealtimeMessages(onMessageReceived: (msg: Message) => void): () => void {
     let channel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null;
@@ -266,23 +273,36 @@ export class ChatService {
       }
     }
 
-    // BroadcastChannel listener for local multi-tab sync
+    // BroadcastChannel listener
     const handleBroadcast = (e: MessageEvent) => {
       if (e.data && e.data.type === 'NEW_MESSAGE') {
         const msg = e.data.payload as Message;
         ivyDb.messages.put(msg);
         onMessageReceived(msg);
-      } else if (e.data && e.data.type === 'MESSAGE_EDITED') {
-        this.getMessages().then((msgs) => {
-          if (msgs.length > 0 && msgs[msgs.length - 1]) {
-            onMessageReceived(msgs[msgs.length - 1]);
+      }
+    };
+
+    // Storage Event listener for cross-window / cross-tab receipt
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (e.key === 'ivy_message_event' && e.newValue) {
+        try {
+          const data = JSON.parse(e.newValue);
+          if (data.type === 'NEW_MESSAGE' && data.payload) {
+            const msg = data.payload as Message;
+            ivyDb.messages.put(msg);
+            onMessageReceived(msg);
           }
-        });
+        } catch {
+          // Ignore JSON parse errors
+        }
       }
     };
 
     if (broadcastChannel) {
       broadcastChannel.addEventListener('message', handleBroadcast);
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', handleStorageEvent);
     }
 
     return () => {
@@ -291,6 +311,9 @@ export class ChatService {
       }
       if (broadcastChannel) {
         broadcastChannel.removeEventListener('message', handleBroadcast);
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('storage', handleStorageEvent);
       }
     };
   }
