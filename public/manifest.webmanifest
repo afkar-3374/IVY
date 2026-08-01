@@ -1,0 +1,21 @@
+{
+  "name": "Ivy - Private Couple Chat",
+  "short_name": "Ivy",
+  "description": "Our space, just for us. Private messenger for two.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FDF8F6",
+  "theme_color": "#FDF8F6",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

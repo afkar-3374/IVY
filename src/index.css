@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-primary: #FDF8F6;
+    --bg-card: #FFFFFF;
+    --accent: #C95565;
+    --accent-hover: #B34757;
+    --text-primary: #1E1D24;
+    --text-secondary: #78716C;
+    --bubble-sent: #FCE8EC;
+    --bubble-sent-text: #501C25;
+    --bubble-received: #FFFFFF;
+    --bubble-received-text: #1E1D24;
+  }
+
+  .dark {
+    --bg-primary: #16151A;
+    --bg-card: #1E1D24;
+    --accent: #D76575;
+    --accent-hover: #E37987;
+    --text-primary: #F5F5F4;
+    --text-secondary: #A8A29E;
+    --bubble-sent: #4A1D28;
+    --bubble-sent-text: #FCE8EC;
+    --bubble-received: #28262E;
+    --bubble-received-text: #F5F5F4;
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(201, 85, 101, 0.2);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(201, 85, 101, 0.4);
+}
+
+/* Botanical Watermark Background Pattern */
+.bg-botanical-pattern {
+  background-color: var(--bg-primary);
+  background-image: radial-gradient(rgba(201, 85, 101, 0.05) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+/* Safe Area Insets for Mobile Cutouts */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 16px);
+}
+
+/* Touch active scale effect */
+.active-scale {
+  transition: transform 0.15s ease;
+}
+.active-scale:active {
+  transform: scale(0.96);
+}
+
+/* Glassmorphism panel */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.dark .glass-panel {
+  background: rgba(30, 29, 36, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
