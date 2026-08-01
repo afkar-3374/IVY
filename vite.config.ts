@@ -8,11 +8,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['favicon.ico', 'pwa-icon.svg'],
       manifest: {
         name: 'Ivy - Private Couple Chat',
         short_name: 'Ivy',
-        description: 'Our space, just for us. Private offline-first messenger for two.',
+        description: 'Our space, just for us. Private messenger for two.',
         theme_color: '#FDF8F6',
         background_color: '#FDF8F6',
         display: 'standalone',
@@ -20,19 +20,9 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
-            src: 'pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: 'pwa-512x512.png',
+            src: 'pwa-icon.svg',
             sizes: '512x512',
-            type: 'image/png'
-          },
-          {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
+            type: 'image/svg+xml',
             purpose: 'any maskable'
           }
         ]

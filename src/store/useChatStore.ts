@@ -30,7 +30,7 @@ interface ChatState {
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isLoadingMessages: false,
-  hasMoreMessages: true,
+  hasMoreMessages: false,
   pageOffset: 0,
   activeReplyTarget: null,
   selectedMessage: null,
@@ -40,15 +40,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   loadInitialMessages: async () => {
     set({ isLoadingMessages: true });
-    const msgs = await chatService.getMessages(50, 0);
+    const msgs = await chatService.getMessages();
     set({
       messages: msgs,
       isLoadingMessages: false,
-      hasMoreMessages: msgs.length >= 50,
+      hasMoreMessages: false,
       pageOffset: 0,
     });
 
-    // Subscribe to live Supabase Realtime changes if not already subscribed
+    // Subscribe directly to live Supabase Realtime changes
     if (!get().isRealtimeSubscribed) {
       set({ isRealtimeSubscribed: true });
       chatService.subscribeToRealtimeMessages((incomingMsg) => {
@@ -72,19 +72,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   loadMoreMessages: async () => {
-    const { pageOffset, messages, hasMoreMessages, isLoadingMessages } = get();
-    if (!hasMoreMessages || isLoadingMessages) return;
-
-    set({ isLoadingMessages: true });
-    const nextOffset = pageOffset + 50;
-    const olderMsgs = await chatService.getMessages(50, nextOffset);
-
-    set({
-      messages: [...olderMsgs, ...messages],
-      isLoadingMessages: false,
-      hasMoreMessages: olderMsgs.length >= 50,
-      pageOffset: nextOffset,
-    });
+    // Direct Supabase mode loads full conversation stream
   },
 
   sendMessage: async (senderId, receiverId, content) => {
@@ -164,7 +152,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   toggleReaction: async (localUuid, userId, emoji) => {
     await chatService.toggleReaction(localUuid, userId, emoji);
-    const msgs = await chatService.getMessages(50, 0);
+    const msgs = await chatService.getMessages();
     set({ messages: msgs });
   },
 
