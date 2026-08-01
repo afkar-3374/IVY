@@ -1,11 +1,10 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Check, CheckCheck, Clock, FileText, Play, Pin, Star, CornerDownLeft } from 'lucide-react';
+import { Check, CheckCheck, Clock, FileText, Play, Pause, Pin, Star, CornerDownLeft } from 'lucide-react';
 import type { Message } from '../../types';
 import { formatMessageTime } from '../../utils/date';
 import { isMessageFromUser } from '../../utils/message';
 import { useAuthStore } from '../../store/useAuthStore';
-import { useChatStore } from '../../store/useChatStore';
 
 interface MessageBubbleProps {
   message: Message;
@@ -21,6 +20,50 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const currentUser = useAuthStore((state) => state.user);
   const isMine = currentUser ? isMessageFromUser(message, currentUser.id) : false;
 
+  // Voice note audio player states
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      const audio = audioRef.current;
+      const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
+      const handleLoadedMetadata = () => setDuration(audio.duration || 0);
+      const handleEnded = () => setIsPlaying(false);
+
+      audio.addEventListener('timeupdate', handleTimeUpdate);
+      audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.addEventListener('ended', handleEnded);
+
+      return () => {
+        audio.removeEventListener('timeupdate', handleTimeUpdate);
+        audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        audio.removeEventListener('ended', handleEnded);
+      };
+    }
+  }, [message.content]);
+
+  const togglePlayAudio = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!audioRef.current) return;
+
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+    }
+  };
+
+  const formatSeconds = (sec: number) => {
+    if (isNaN(sec) || !isFinite(sec)) return '0:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
   const renderStatus = () => {
     if (!isMine) return null;
     if (message.status === 'Sending' || message.status === 'Queued') {
@@ -32,7 +75,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     if (message.status === 'Delivered') {
       return <CheckCheck className="w-3.5 h-3.5 text-stone-400" />;
     }
-    // Read status
     return <CheckCheck className="w-3.5 h-3.5 text-[#C95565] dark:text-rose-400" />;
   };
 
@@ -79,55 +121,76 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </div>
         )}
 
-        {/* Voice Note Player Preview */}
+        {/* Voice Note Interactive Player */}
         {message.message_type === 'voice' && !message.deleted && (
-          <div className="flex items-center gap-3 py-1">
-            <button className="w-8 h-8 rounded-full bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-soft">
-              <Play className="w-4 h-4 fill-white ml-0.5" />
+          <div className="flex items-center gap-3 py-1 min-w-[200px]">
+            <audio ref={audioRef} src={message.content} preload="metadata" />
+            <button
+              onClick={togglePlayAudio}
+              className="w-9 h-9 rounded-full bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-soft active-scale"
+            >
+              {isPlaying ? (
+                <Pause className="w-4 h-4 fill-white" />
+              ) : (
+                <Play className="w-4 h-4 fill-white ml-0.5" />
+              )}
             </button>
+
             <div className="flex-1 flex flex-col gap-1">
-              <div className="flex items-center gap-0.5 h-4">
-                {[40, 70, 30, 90, 60, 80, 40, 60, 90, 50, 30, 70, 40].map((h, i) => (
-                  <div
-                    key={i}
-                    className="w-1 bg-[#C95565]/60 rounded-full"
-                    style={{ height: `${h}%` }}
-                  />
-                ))}
+              {/* Waveform Visualization Bars */}
+              <div className="flex items-center gap-0.5 h-4 cursor-pointer">
+                {[40, 70, 30, 90, 60, 80, 40, 60, 90, 50, 30, 70, 40, 60, 80, 40].map((h, i) => {
+                  const barProgress = (i / 16) * (duration || 1);
+                  const isPassed = currentTime >= barProgress;
+                  return (
+                    <div
+                      key={i}
+                      className={`w-1 rounded-full transition-all duration-150 ${
+                        isPassed ? 'bg-[#C95565]' : 'bg-stone-300 dark:bg-stone-600'
+                      }`}
+                      style={{ height: `${h}%` }}
+                    />
+                  );
+                })}
               </div>
-              <span className="text-[10px] font-semibold text-stone-500 dark:text-stone-400">0:18</span>
+              <div className="flex items-center justify-between text-[10px] font-semibold text-stone-500 dark:text-stone-400">
+                <span>{formatSeconds(currentTime)}</span>
+                <span>{duration ? formatSeconds(duration) : '0:18'}</span>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Attachment Document Preview Card */}
+        {/* Document Preview */}
         {message.message_type === 'document' && !message.deleted && (
           <div className="flex items-center gap-3 p-2 bg-white/70 dark:bg-stone-800/60 rounded-2xl mb-1 border border-stone-200/60 dark:border-stone-700/40">
             <div className="w-9 h-9 rounded-xl bg-rose-100 dark:bg-rose-900/40 text-[#C95565] flex items-center justify-center">
               <FileText className="w-5 h-5" />
             </div>
             <div>
-              <p className="font-bold text-xs text-stone-900 dark:text-stone-100">Love Letter.pdf</p>
-              <p className="text-[10px] text-stone-500 dark:text-stone-400">2.4 MB • PDF</p>
+              <p className="font-bold text-xs text-stone-900 dark:text-stone-100">Document.pdf</p>
+              <p className="text-[10px] text-stone-500 dark:text-stone-400">PDF Document</p>
             </div>
           </div>
         )}
 
-        {/* Photo Image Preview */}
+        {/* Image Preview */}
         {message.message_type === 'image' && !message.deleted && (
           <div className="mb-2 rounded-2xl overflow-hidden shadow-soft max-w-xs">
             <img
-              src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=600&q=80"
-              alt="Sunset preview"
+              src={message.content}
+              alt="Photo preview"
               className="w-full h-44 object-cover"
             />
           </div>
         )}
 
         {/* Text Content */}
-        <p className="whitespace-pre-wrap break-words leading-relaxed">
-          {message.content}
-        </p>
+        {message.message_type !== 'voice' && message.message_type !== 'image' && (
+          <p className="whitespace-pre-wrap break-words leading-relaxed">
+            {message.content}
+          </p>
+        )}
 
         {/* Timestamp & Status Footer */}
         <div className={`flex items-center justify-end gap-1 text-[10px] mt-1 ${isMine ? 'text-[#7D303C] dark:text-rose-200/70' : 'text-stone-400 dark:text-stone-400'}`}>

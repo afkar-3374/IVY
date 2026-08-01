@@ -10,12 +10,14 @@ import {
   Send,
   X,
   ChevronLeft,
+  Trash2,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useChatStore } from '../store/useChatStore';
 import { usePresence } from '../hooks/usePresence';
 import { useInfiniteMessages } from '../hooks/useInfiniteMessages';
 import { useTyping } from '../hooks/useTyping';
+import { voiceRecorder } from '../services/voiceRecorder';
 import { MessageBubble } from '../components/Chat/MessageBubble';
 import { MessageActionModal } from '../components/Chat/MessageActionModal';
 import { EmojiPickerModal } from '../components/Chat/EmojiPickerModal';
@@ -38,6 +40,11 @@ const ChatPage: React.FC = () => {
   const [isActionModalOpen, setIsActionModalOpen] = useState(false);
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [isReactionsModalOpen, setIsReactionsModalOpen] = useState(false);
+
+  // Voice Note Recording State
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const {
     sendMessage,
@@ -85,7 +92,54 @@ const ChatPage: React.FC = () => {
 
     const text = inputContent.trim();
     setInputContent('');
-    await sendMessage(currentUser.id, partnerUser.id, text);
+    await sendMessage(currentUser.id, partnerUser.id, text, 'text');
+  };
+
+  // Start Voice Note Recording
+  const startRecording = async () => {
+    try {
+      await voiceRecorder.start();
+      setIsRecordingVoice(true);
+      setRecordingSeconds(0);
+      timerIntervalRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    } catch (err: any) {
+      addToast(err.message || 'Microphone access is required', 'error');
+    }
+  };
+
+  // Cancel Voice Note Recording
+  const cancelRecording = () => {
+    voiceRecorder.cancel();
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    setIsRecordingVoice(false);
+    setRecordingSeconds(0);
+  };
+
+  // Stop & Send Voice Note
+  const stopAndSendVoiceNote = async () => {
+    if (!currentUser) return;
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+
+    try {
+      const { audioUrl } = await voiceRecorder.stop();
+      setIsRecordingVoice(false);
+      setRecordingSeconds(0);
+
+      await sendMessage(currentUser.id, partnerUser.id, audioUrl, 'voice');
+      addToast('Voice note sent ❤️', 'info');
+    } catch (err: any) {
+      addToast('Failed to send voice note', 'error');
+      setIsRecordingVoice(false);
+      setRecordingSeconds(0);
+    }
+  };
+
+  const formatTimer = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
   const handleMessageLongPress = (msg: Message) => {
@@ -133,7 +187,7 @@ const ChatPage: React.FC = () => {
                     : 'text-stone-400 dark:text-stone-400'
                 }`}
               >
-                {subtext}
+                {isRecordingVoice ? 'Recording Voice...' : subtext}
               </p>
             </div>
           </div>
@@ -213,54 +267,85 @@ const ChatPage: React.FC = () => {
         </div>
       )}
 
-      {/* Message Input Footer */}
+      {/* Message Input / Voice Note Recorder Footer */}
       <footer className="z-30 w-full max-w-md mx-auto bg-white/95 dark:bg-[#1E1D24]/95 backdrop-blur-md p-3 border-t border-stone-100 dark:border-stone-800 pb-safe flex-shrink-0 shadow-soft">
-        <form onSubmit={handleSend} className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => addToast('Media sharing ready for storage connection ❤️', 'info')}
-            className="w-10 h-10 rounded-full bg-stone-100 dark:bg-stone-800 text-[#C95565] flex items-center justify-center flex-shrink-0 active-scale"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
-
-          <div className="flex-1 relative flex items-center">
-            <input
-              type="text"
-              value={inputContent}
-              onChange={(e) => {
-                setInputContent(e.target.value);
-                triggerTyping();
-              }}
-              placeholder="Type a message..."
-              className="w-full bg-stone-100 dark:bg-[#16151A] text-stone-900 dark:text-stone-100 text-sm px-4 py-2.5 rounded-full border border-transparent focus:outline-none focus:border-[#C95565]/40 pr-10"
-            />
+        {isRecordingVoice ? (
+          /* Live Voice Note Recording Bar */
+          <div className="flex items-center justify-between gap-3 px-2 py-1">
             <button
-              type="button"
-              onClick={() => setIsEmojiPickerOpen(true)}
-              className="absolute right-3 text-stone-400 hover:text-[#C95565]"
+              onClick={cancelRecording}
+              className="p-2.5 rounded-full bg-rose-100 text-[#C95565] hover:bg-rose-200 active-scale"
+              title="Cancel Recording"
             >
-              <Smile className="w-5 h-5" />
+              <Trash2 className="w-5 h-5" />
             </button>
-          </div>
 
-          {inputContent.trim() ? (
+            <div className="flex-1 flex items-center justify-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-red-500 animate-ping" />
+              <span className="text-sm font-bold text-red-500 font-mono">
+                {formatTimer(recordingSeconds)}
+              </span>
+              <span className="text-xs text-stone-400 dark:text-stone-400">Recording voice note...</span>
+            </div>
+
             <button
-              type="submit"
+              onClick={stopAndSendVoiceNote}
               className="w-10 h-10 rounded-full bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-soft active-scale"
+              title="Send Voice Note"
             >
               <Send className="w-4 h-4 ml-0.5" />
             </button>
-          ) : (
+          </div>
+        ) : (
+          /* Standard Input Bar */
+          <form onSubmit={handleSend} className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => addToast('Recording voice note simulation ❤️', 'info')}
-              className="w-10 h-10 rounded-full bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-soft active-scale"
+              onClick={() => addToast('Media sharing ready for storage connection ❤️', 'info')}
+              className="w-10 h-10 rounded-full bg-stone-100 dark:bg-stone-800 text-[#C95565] flex items-center justify-center flex-shrink-0 active-scale"
             >
-              <Mic className="w-5 h-5" />
+              <Plus className="w-5 h-5" />
             </button>
-          )}
-        </form>
+
+            <div className="flex-1 relative flex items-center">
+              <input
+                type="text"
+                value={inputContent}
+                onChange={(e) => {
+                  setInputContent(e.target.value);
+                  triggerTyping();
+                }}
+                placeholder="Type a message..."
+                className="w-full bg-stone-100 dark:bg-[#16151A] text-stone-900 dark:text-stone-100 text-sm px-4 py-2.5 rounded-full border border-transparent focus:outline-none focus:border-[#C95565]/40 pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setIsEmojiPickerOpen(true)}
+                className="absolute right-3 text-stone-400 hover:text-[#C95565]"
+              >
+                <Smile className="w-5 h-5" />
+              </button>
+            </div>
+
+            {inputContent.trim() ? (
+              <button
+                type="submit"
+                className="w-10 h-10 rounded-full bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-soft active-scale"
+              >
+                <Send className="w-4 h-4 ml-0.5" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={startRecording}
+                className="w-10 h-10 rounded-full bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-soft active-scale"
+                title="Record Voice Note"
+              >
+                <Mic className="w-5 h-5" />
+              </button>
+            )}
+          </form>
+        )}
       </footer>
 
       {/* Action Modals */}

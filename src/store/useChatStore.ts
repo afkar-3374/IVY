@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Message } from '../types';
+import type { Message, MessageType } from '../types';
 import { chatService } from '../services/chatService';
 
 interface ChatState {
@@ -15,7 +15,7 @@ interface ChatState {
 
   loadInitialMessages: () => Promise<void>;
   loadMoreMessages: () => Promise<void>;
-  sendMessage: (senderId: string, receiverId: string, content: string) => Promise<void>;
+  sendMessage: (senderId: string, receiverId: string, content: string, messageType?: MessageType) => Promise<void>;
   editMessage: (localUuid: string, newContent: string) => Promise<void>;
   deleteMessage: (localUuid: string) => Promise<void>;
   togglePin: (localUuid: string) => Promise<void>;
@@ -48,7 +48,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       pageOffset: 0,
     });
 
-    // Subscribe directly to live Supabase Realtime changes
     if (!get().isRealtimeSubscribed) {
       set({ isRealtimeSubscribed: true });
       chatService.subscribeToRealtimeMessages((incomingMsg) => {
@@ -71,11 +70,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  loadMoreMessages: async () => {
-    // Direct Supabase mode loads full conversation stream
-  },
+  loadMoreMessages: async () => {},
 
-  sendMessage: async (senderId, receiverId, content) => {
+  sendMessage: async (senderId, receiverId, content, messageType = 'text') => {
     const replyTarget = get().activeReplyTarget;
     const replyRef = replyTarget
       ? {
@@ -90,6 +87,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sender_id: senderId,
       receiver_id: receiverId,
       content,
+      message_type: messageType,
       reply_to: replyTarget?.local_uuid,
       reply_to_msg: replyRef,
     });
