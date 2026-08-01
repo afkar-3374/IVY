@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import type { Message, MessageType } from '../types';
+import type { Message, MessageReaction, MessageType } from '../types';
 import { chatService } from '../services/chatService';
+import { generateLocalUuid } from '../utils/message';
 
 interface ChatState {
   messages: Message[];
@@ -20,7 +21,7 @@ interface ChatState {
   deleteMessage: (localUuid: string) => Promise<void>;
   togglePin: (localUuid: string) => Promise<void>;
   toggleStar: (localUuid: string) => Promise<void>;
-  toggleReaction: (localUuid: string, userId: string, emoji: string) => Promise<void>;
+  toggleReaction: (messageId: string, userId: string, emoji: string) => Promise<void>;
   setActiveReplyTarget: (msg: Message | null) => void;
   setSelectedMessage: (msg: Message | null) => void;
   setEditingMessage: (msg: Message | null) => void;
@@ -148,10 +149,38 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
   },
 
-  toggleReaction: async (localUuid, userId, emoji) => {
-    await chatService.toggleReaction(localUuid, userId, emoji);
-    const msgs = await chatService.getMessages();
-    set({ messages: msgs });
+  toggleReaction: async (messageId, userId, emoji) => {
+    // 1. Optimistic UI update so reaction badge displays instantly
+    set((state) => ({
+      messages: state.messages.map((m) => {
+        if (m.id === messageId || m.local_uuid === messageId) {
+          const currentReactions = m.reactions || [];
+          const existingIdx = currentReactions.findIndex(
+            (r) => r.profile_id === userId && r.emoji === emoji
+          );
+          let updatedReactions: MessageReaction[];
+          if (existingIdx >= 0) {
+            updatedReactions = currentReactions.filter((_, idx) => idx !== existingIdx);
+          } else {
+            updatedReactions = [
+              ...currentReactions,
+              {
+                id: generateLocalUuid(),
+                message_id: messageId,
+                profile_id: userId,
+                emoji,
+                created_at: new Date().toISOString(),
+              },
+            ];
+          }
+          return { ...m, reactions: updatedReactions };
+        }
+        return m;
+      }),
+    }));
+
+    // 2. Persist asynchronously to Supabase
+    await chatService.toggleReaction(messageId, userId, emoji);
   },
 
   setActiveReplyTarget: (msg) => set({ activeReplyTarget: msg }),

@@ -42,10 +42,10 @@ CREATE TABLE IF NOT EXISTS public.messages (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. Create Message Reactions Table
+-- 4. Create Message Reactions Table (message_id VARCHAR(64) accepts local and server UUIDs)
 CREATE TABLE IF NOT EXISTS public.message_reactions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    message_id UUID NOT NULL,
+    message_id VARCHAR(64) NOT NULL,
     profile_id UUID NOT NULL,
     emoji VARCHAR(20) NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
