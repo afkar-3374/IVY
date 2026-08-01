@@ -320,7 +320,10 @@ const ChatPage: React.FC = () => {
               />
               <button
                 type="button"
-                onClick={() => setIsEmojiPickerOpen(true)}
+                onClick={() => {
+                  setSelectedMessage(null);
+                  setIsEmojiPickerOpen(true);
+                }}
                 className="absolute right-3 text-stone-400 hover:text-[#C95565]"
               >
                 <Smile className="w-5 h-5" />
@@ -359,6 +362,7 @@ const ChatPage: React.FC = () => {
             toggleReaction(selectedMessage.local_uuid, currentUser.id, emoji);
           }
         }}
+        onOpenCustomEmojiPicker={() => setIsEmojiPickerOpen(true)}
         onReply={() => selectedMessage && setActiveReplyTarget(selectedMessage)}
         onEdit={() => {
           if (selectedMessage) {
@@ -380,7 +384,14 @@ const ChatPage: React.FC = () => {
       <EmojiPickerModal
         isOpen={isEmojiPickerOpen}
         onClose={() => setIsEmojiPickerOpen(false)}
-        onSelectEmoji={(emoji) => setInputContent((prev) => prev + emoji)}
+        onSelectEmoji={(emoji) => {
+          if (selectedMessage && currentUser) {
+            toggleReaction(selectedMessage.local_uuid, currentUser.id, emoji);
+            setSelectedMessage(null);
+          } else {
+            setInputContent((prev) => prev + emoji);
+          }
+        }}
       />
 
       <ReactionsDetailModal

@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Reply, Edit3, Trash2, Copy, Star, Pin, Share2 } from 'lucide-react';
+import { Reply, Edit3, Trash2, Copy, Star, Pin, Plus } from 'lucide-react';
 import type { Message } from '../../types';
 import { QUICK_EMOJIS } from '../../utils/constants';
 
@@ -10,6 +10,7 @@ interface MessageActionModalProps {
   currentUserId: string;
   onClose: () => void;
   onReactionSelect: (emoji: string) => void;
+  onOpenCustomEmojiPicker: () => void;
   onReply: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -24,6 +25,7 @@ export const MessageActionModal: React.FC<MessageActionModalProps> = ({
   currentUserId,
   onClose,
   onReactionSelect,
+  onOpenCustomEmojiPicker,
   onReply,
   onEdit,
   onDelete,
@@ -58,7 +60,7 @@ export const MessageActionModal: React.FC<MessageActionModalProps> = ({
           {/* Top Grab Handle */}
           <div className="w-12 h-1 bg-stone-300 dark:bg-stone-700 rounded-full mx-auto mb-4" />
 
-          {/* Quick Reaction Bar */}
+          {/* Quick Reaction Bar (5 Default Emojis + 1 Choice Custom Plus Button) */}
           <div className="flex items-center justify-around bg-stone-100 dark:bg-stone-800/80 p-2 rounded-full mb-4 shadow-inner">
             {QUICK_EMOJIS.map((emoji) => (
               <button
@@ -68,16 +70,29 @@ export const MessageActionModal: React.FC<MessageActionModalProps> = ({
                   onClose();
                 }}
                 className="text-2xl hover:scale-125 transition-transform active-scale p-1"
+                title={`React with ${emoji}`}
               >
                 {emoji}
               </button>
             ))}
+
+            {/* Choice 1 Custom Emoji Picker Button */}
+            <button
+              onClick={() => {
+                onClose();
+                onOpenCustomEmojiPicker();
+              }}
+              className="w-8 h-8 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200 flex items-center justify-center hover:scale-110 active-scale shadow-sm"
+              title="More Emojis"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
           </div>
 
           {/* Message Content Preview */}
           <div className="p-3 bg-stone-50 dark:bg-stone-900/60 rounded-2xl mb-4 border border-stone-200/50 dark:border-stone-800">
             <p className="text-xs text-stone-600 dark:text-stone-300 line-clamp-2 italic">
-              "{message.content}"
+              "{message.message_type === 'voice' ? '🎵 Voice Note' : message.content}"
             </p>
           </div>
 

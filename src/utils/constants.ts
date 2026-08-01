@@ -36,4 +36,4 @@ export const WALLPAPER_PRESETS = [
   { id: 'minimal', name: 'Minimal Soft Cream', bgClass: 'bg-[#FDF8F6]' },
 ];
 
-export const QUICK_EMOJIS = ['❤️', '😍', '😂', '😮', '😢', '🙏'];
+export const QUICK_EMOJIS = ['❤️', '😂', '😍', '😮', '🙏'];
