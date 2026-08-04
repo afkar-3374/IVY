@@ -71,7 +71,35 @@ export interface PresenceState {
   typing: boolean;
   recording_audio: boolean;
   uploading_media: boolean;
+  in_call?: boolean;
   last_seen: string;
+}
+
+export type CallType = 'audio' | 'video';
+export type CallState = 'idle' | 'outgoing' | 'incoming' | 'connected' | 'ended' | 'rejected' | 'busy';
+
+export interface CallSession {
+  id: string; // Call Room UUID
+  caller_id: string;
+  receiver_id: string;
+  call_type: CallType;
+  state: CallState;
+  started_at?: string;
+  ended_at?: string;
+  duration_seconds?: number;
+  is_muted?: boolean;
+  is_video_off?: boolean;
+  is_speaker_on?: boolean;
+}
+
+export interface CallHistoryRecord {
+  id: string;
+  caller_id: string;
+  receiver_id: string;
+  call_type: CallType;
+  status: 'completed' | 'missed' | 'rejected' | 'busy';
+  duration_seconds: number;
+  created_at: string;
 }
 
 export type QueueActionType =
@@ -82,7 +110,8 @@ export type QueueActionType =
   | 'REMOVE_REACTION'
   | 'PIN_MESSAGE'
   | 'STAR_MESSAGE'
-  | 'UPDATE_PROFILE';
+  | 'UPDATE_PROFILE'
+  | 'MARK_READ';
 
 export interface SyncQueueItem {
   id: string; // Action UUID
@@ -94,12 +123,13 @@ export interface SyncQueueItem {
   created_at: string;
 }
 
-export type ThemeMode = 'rose' | 'midnight' | 'sunset' | 'lavender';
+export type ThemeMode = 'rose' | 'midnight' | 'sunset' | 'lavender' | 'ocean' | 'forest';
 
-export type WallpaperPreset = 'botanical' | 'sunset' | 'starry' | 'minimal' | 'custom';
+export type WallpaperPreset = 'botanical' | 'sunset' | 'starry' | 'minimal' | 'blush' | 'aurora' | 'custom';
 
 export interface SearchFilter {
   query: string;
   tab: 'all' | 'messages' | 'media' | 'links' | 'files';
   date_range?: string;
 }
+

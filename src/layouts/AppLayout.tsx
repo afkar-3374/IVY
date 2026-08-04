@@ -6,6 +6,7 @@ import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { ToastContainer } from '../components/ui/Toast';
 import { InstallPromptBanner } from '../components/Pwa/InstallPromptBanner';
 import { BottomTabBar } from '../components/Navigation/BottomTabBar';
+import { CallOverlay } from '../components/Call/CallOverlay';
 import { queueProcessor } from '../services/sync/queueProcessor';
 import { WifiOff } from 'lucide-react';
 
@@ -44,6 +45,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         {/* PWA Install Banner */}
         <InstallPromptBanner />
 
+        {/* Global WebRTC Audio/Video Call Overlay */}
+        <CallOverlay />
+
         {/* Toast Notifications Portal */}
         <ToastContainer />
 
@@ -58,3 +62,4 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     </div>
   );
 };
+

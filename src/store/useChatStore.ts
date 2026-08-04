@@ -11,20 +11,24 @@ interface ChatState {
   activeReplyTarget: Message | null;
   selectedMessage: Message | null;
   editingMessage: Message | null;
+  targetMessageId: string | null;
   searchQuery: string;
   isRealtimeSubscribed: boolean;
 
   loadInitialMessages: () => Promise<void>;
   loadMoreMessages: () => Promise<void>;
   sendMessage: (senderId: string, receiverId: string, content: string, messageType?: MessageType) => Promise<void>;
+  retryFailedMessage: (localUuid: string) => Promise<void>;
   editMessage: (localUuid: string, newContent: string) => Promise<void>;
   deleteMessage: (localUuid: string) => Promise<void>;
   togglePin: (localUuid: string) => Promise<void>;
   toggleStar: (localUuid: string) => Promise<void>;
   toggleReaction: (messageId: string, userId: string, emoji: string) => Promise<void>;
+  markAsRead: (partnerId: string, currentUserId: string) => Promise<void>;
   setActiveReplyTarget: (msg: Message | null) => void;
   setSelectedMessage: (msg: Message | null) => void;
   setEditingMessage: (msg: Message | null) => void;
+  setTargetMessageId: (id: string | null) => void;
   setSearchQuery: (query: string) => void;
 }
 
@@ -36,6 +40,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   activeReplyTarget: null,
   selectedMessage: null,
   editingMessage: null,
+  targetMessageId: null,
   searchQuery: '',
   isRealtimeSubscribed: false,
 
@@ -45,7 +50,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       messages: msgs,
       isLoadingMessages: false,
-      hasMoreMessages: false,
+      hasMoreMessages: msgs.length > 50,
       pageOffset: 0,
     });
 
@@ -108,6 +113,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
+  retryFailedMessage: async (localUuid) => {
+    await chatService.retryFailedMessage(localUuid);
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.local_uuid === localUuid ? { ...m, status: 'Sending' } : m
+      ),
+    }));
+  },
+
   editMessage: async (localUuid, newContent) => {
     await chatService.editMessage(localUuid, newContent);
     set((state) => ({
@@ -150,18 +164,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   toggleReaction: async (messageId, userId, emoji) => {
-    // 1. Optimistic UI update so reaction badge displays instantly
+    // Optimistic UI update enforcing single reaction per user per message
     set((state) => ({
       messages: state.messages.map((m) => {
         if (m.id === messageId || m.local_uuid === messageId) {
           const currentReactions = m.reactions || [];
-          const existingIdx = currentReactions.findIndex(
-            (r) => r.profile_id === userId && r.emoji === emoji
-          );
+          const existingUserReaction = currentReactions.find((r) => r.profile_id === userId);
+
           let updatedReactions: MessageReaction[];
-          if (existingIdx >= 0) {
-            updatedReactions = currentReactions.filter((_, idx) => idx !== existingIdx);
+          if (existingUserReaction) {
+            if (existingUserReaction.emoji === emoji) {
+              // Same emoji -> remove reaction
+              updatedReactions = currentReactions.filter((r) => r.profile_id !== userId);
+            } else {
+              // Different emoji -> replace reaction
+              updatedReactions = currentReactions.map((r) =>
+                r.profile_id === userId
+                  ? { ...r, emoji, created_at: new Date().toISOString() }
+                  : r
+              );
+            }
           } else {
+            // New reaction
             updatedReactions = [
               ...currentReactions,
               {
@@ -179,12 +203,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }),
     }));
 
-    // 2. Persist asynchronously to Supabase
     await chatService.toggleReaction(messageId, userId, emoji);
+  },
+
+  markAsRead: async (partnerId, currentUserId) => {
+    await chatService.markMessagesAsRead(partnerId, currentUserId);
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.sender_id === partnerId && m.status !== 'Read' ? { ...m, status: 'Read' } : m
+      ),
+    }));
   },
 
   setActiveReplyTarget: (msg) => set({ activeReplyTarget: msg }),
   setSelectedMessage: (msg) => set({ selectedMessage: msg }),
   setEditingMessage: (msg) => set({ editingMessage: msg }),
+  setTargetMessageId: (id) => set({ targetMessageId: id }),
   setSearchQuery: (query) => set({ searchQuery: query }),
 }));

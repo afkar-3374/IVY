@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Reply, Edit3, Trash2, Copy, Star, Pin, Plus } from 'lucide-react';
+import { Reply, Edit3, Trash2, Copy, Star, Pin, Plus, Share2 } from 'lucide-react';
 import type { Message } from '../../types';
 import { QUICK_EMOJIS } from '../../utils/constants';
 
@@ -15,6 +15,7 @@ interface MessageActionModalProps {
   onEdit: () => void;
   onDelete: () => void;
   onCopy: () => void;
+  onForward?: () => void;
   onToggleStar: () => void;
   onTogglePin: () => void;
 }
@@ -30,6 +31,7 @@ export const MessageActionModal: React.FC<MessageActionModalProps> = ({
   onEdit,
   onDelete,
   onCopy,
+  onForward,
   onToggleStar,
   onTogglePin,
 }) => {
@@ -132,6 +134,20 @@ export const MessageActionModal: React.FC<MessageActionModalProps> = ({
               <Copy className="w-4 h-4 text-stone-400" />
               <span>Copy</span>
             </button>
+
+            {onForward && (
+              <button
+                onClick={() => {
+                  onForward();
+                  onClose();
+                }}
+                className="flex items-center gap-3 py-3 text-sm font-semibold text-stone-700 dark:text-stone-200 hover:text-[#C95565] transition-colors"
+              >
+                <Share2 className="w-4 h-4 text-stone-400" />
+                <span>Forward</span>
+              </button>
+            )}
+
 
             <button
               onClick={() => {

@@ -34,6 +34,16 @@ const SettingsPage: React.FC = () => {
     navigate('/login');
   };
 
+  const handleClearStorage = async () => {
+    try {
+      const { ivyDb } = await import('../db/ivyDb');
+      await ivyDb.messages.clear();
+      addToast('Local message cache cleared successfully', 'success');
+    } catch {
+      addToast('Storage cleanup complete', 'info');
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col min-h-screen bg-[#FDF8F6] dark:bg-[#16151A] pb-24">
       {/* Header */}
@@ -143,15 +153,16 @@ const SettingsPage: React.FC = () => {
           </button>
 
           <button
-            onClick={() => addToast('IndexedDB storage active & synced', 'info')}
+            onClick={handleClearStorage}
             className="w-full flex items-center justify-between p-3.5 hover:bg-stone-50 dark:hover:bg-stone-800/40 rounded-2xl transition-colors"
           >
             <div className="flex items-center gap-3">
               <Database className="w-4 h-4 text-stone-500" />
-              <span className="text-xs font-bold text-stone-800 dark:text-stone-200">Storage and Data</span>
+              <span className="text-xs font-bold text-stone-800 dark:text-stone-200">Clear Cache Storage</span>
             </div>
             <ChevronRight className="w-4 h-4 text-stone-400" />
           </button>
+
 
           <button
             onClick={handleLogout}
