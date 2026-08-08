@@ -5,7 +5,7 @@ export const USER_2_ID = '22222222-2222-4222-a222-222222222222';
 
 export const DEFAULT_USER_1_PROFILE: UserProfile = {
   id: USER_1_ID,
-  login_id_hash: '75c87e7f781db197d10006764516e87f174db9675317424683a9108c48a7ebdf', // SHA-256 of 220609
+  login_id_hash: '0bffe87dfa4bd113259d65cb7182428a8bba979dd60e89b641bcb835a2e1acfa', // SHA-256 of 220609
   display_name: 'Afkar',
   nickname: 'My Princess ❤️',
   about: 'Just a boy in love. ❤️',
@@ -18,7 +18,7 @@ export const DEFAULT_USER_1_PROFILE: UserProfile = {
 
 export const DEFAULT_USER_2_PROFILE: UserProfile = {
   id: USER_2_ID,
-  login_id_hash: '05c2a1e6ec0f80509a25b138612140a3ec6370bb073f47e30d170f2095f9c5d0', // SHA-256 of 030309
+  login_id_hash: '1c5f1257f1b520659769643539651ea62813ca7ca87e567111588e6cd9d6a94c', // SHA-256 of 030309
   display_name: 'Princess',
   nickname: 'My Hero ❤️',
   about: 'You are my today and all of my tomorrows.',

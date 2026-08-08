@@ -49,6 +49,7 @@ function resolveReplyReferences(msgs: Message[]): Message[] {
 }
 
 export class ChatService {
+  private realtimeUnsubscribe: (() => void) | null = null;
   /**
    * Seed default predefined users directly into IndexedDB and Supabase profiles table.
    */
@@ -123,10 +124,16 @@ export class ChatService {
       const localReactions = await ivyDb.reactions.toArray();
 
       const attachReactions = (msgs: Message[], reactions: MessageReaction[]): Message[] => {
-        return msgs.map((m) => {
-          const mReactions = reactions.filter((r) => r.message_id === m.local_uuid || r.message_id === m.id);
-          return { ...m, reactions: mReactions };
-        });
+        const byMessageId = new Map<string, MessageReaction[]>();
+        for (const reaction of reactions) {
+          const entries = byMessageId.get(reaction.message_id) || [];
+          entries.push(reaction);
+          byMessageId.set(reaction.message_id, entries);
+        }
+        return msgs.map((m) => ({
+          ...m,
+          reactions: [...(byMessageId.get(m.local_uuid) || []), ...(m.id === m.local_uuid ? [] : byMessageId.get(m.id) || [])],
+        }));
       };
 
       // 2. Fetch fresh data from Supabase if online
@@ -382,7 +389,7 @@ export class ChatService {
     const unreadMsgs = await ivyDb.messages
       .where('sender_id')
       .equals(partnerId)
-      .and((m) => m.status !== 'Read')
+      .and((m) => m.receiver_id === currentUserId && m.status !== 'Read')
       .toArray();
 
     if (unreadMsgs.length === 0) return;
@@ -402,6 +409,7 @@ export class ChatService {
    * Subscribe directly to Supabase Realtime channel for messages & reactions.
    */
   subscribeToRealtimeMessages(onMessageReceived: (msg: Message) => void): () => void {
+    this.realtimeUnsubscribe?.();
     if (!supabase) return () => {};
 
     const channel = supabase
@@ -411,6 +419,12 @@ export class ChatService {
         { event: '*', schema: 'public', table: 'messages' },
         async (payload) => {
           logger.info('Supabase Realtime message event:', payload.eventType, payload.new);
+          if (payload.eventType === 'DELETE') {
+            const oldItem = payload.old as { local_uuid?: string; id?: string };
+            const localUuid = oldItem.local_uuid || oldItem.id;
+            if (localUuid) await ivyDb.messages.delete(localUuid);
+            return;
+          }
           const item = payload.new as any;
           if (item && item.content) {
             const isAudioData = typeof item.content === 'string' && item.content.startsWith('data:audio/');
@@ -466,11 +480,18 @@ export class ChatService {
       )
       .subscribe();
 
-    return () => {
+    const unsubscribe = () => {
       if (supabase && channel) {
         supabase.removeChannel(channel);
       }
+      if (this.realtimeUnsubscribe === unsubscribe) this.realtimeUnsubscribe = null;
     };
+    this.realtimeUnsubscribe = unsubscribe;
+    return unsubscribe;
+  }
+
+  unsubscribeRealtimeMessages(): void {
+    this.realtimeUnsubscribe?.();
   }
 }
 

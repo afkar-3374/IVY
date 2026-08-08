@@ -5,6 +5,22 @@ import { logger } from '../logger/logger';
 
 export class SyncQueue {
   async enqueue(action_type: QueueActionType, payload: Record<string, unknown>): Promise<SyncQueueItem> {
+    const existing = await ivyDb.syncQueue
+      .where('action_type')
+      .equals(action_type)
+      .filter((item) => {
+        if (item.status === 'Sending') return false;
+        const current = item.payload as Record<string, unknown>;
+        return current.local_uuid === payload.local_uuid
+          || (current.message_id === payload.message_id && current.profile_id === payload.profile_id);
+      })
+      .first();
+
+    if (existing) {
+      await ivyDb.syncQueue.update(existing.id, { payload, status: 'Queued', error_message: undefined });
+      return { ...existing, payload, status: 'Queued', error_message: undefined };
+    }
+
     const item: SyncQueueItem = {
       id: generateLocalUuid(),
       action_type,
@@ -23,6 +39,7 @@ export class SyncQueue {
     return await ivyDb.syncQueue
       .where('status')
       .anyOf(['Queued', 'Failed'])
+      .filter((item) => item.retry_count < 5)
       .sortBy('created_at');
   }
 

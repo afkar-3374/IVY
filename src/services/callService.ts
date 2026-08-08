@@ -28,6 +28,7 @@ export class CallService {
   private onRemoteStreamCallback: ((stream: MediaStream) => void) | null = null;
   private onSignalingEventCallback: ((event: SignalingEvent) => void) | null = null;
   private onConnectionStateChange: ((state: RTCPeerConnectionState) => void) | null = null;
+  private pendingIceCandidates: RTCIceCandidateInit[] = [];
 
   setConnectionStateListener(fn: (state: RTCPeerConnectionState) => void) {
     this.onConnectionStateChange = fn;
@@ -38,7 +39,7 @@ export class CallService {
 
     if (!supabase) return () => {};
 
-    const channelName = `call_signaling_${userId}`;
+    const channelName = 'ivy_call_signaling';
     if (this.channel) {
       supabase.removeChannel(this.channel);
     }
@@ -49,9 +50,11 @@ export class CallService {
 
     this.channel
       .on('broadcast', { event: 'signal' }, ({ payload }) => {
+        if (!payload || (payload as { targetUserId?: string }).targetUserId !== userId) return;
         logger.info('Received call signal:', payload?.type);
         if (this.onSignalingEventCallback) {
-          this.onSignalingEventCallback(payload as SignalingEvent);
+          const { targetUserId: _targetUserId, ...event } = payload as SignalingEvent & { targetUserId: string };
+          this.onSignalingEventCallback(event);
         }
       })
       .subscribe();
@@ -70,19 +73,13 @@ export class CallService {
       return;
     }
     try {
-      const targetChannel = supabase.channel(`call_signaling_${targetUserId}`);
-      await new Promise<void>((resolve) => {
-        targetChannel.subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            targetChannel.send({
-              type: 'broadcast',
-              event: 'signal',
-              payload,
-            });
-            resolve();
-          }
-        });
+      if (!this.channel) throw new Error('Call signaling is not initialized');
+      const result = await this.channel.send({
+        type: 'broadcast',
+        event: 'signal',
+        payload: { ...payload, targetUserId },
       });
+      if (result !== 'ok') throw new Error(`Signal delivery failed: ${result}`);
     } catch (err) {
       logger.error('Error sending call signal:', err);
     }
@@ -116,6 +113,7 @@ export class CallService {
     if (this.peerConnection) {
       this.peerConnection.close();
     }
+    this.pendingIceCandidates = [];
 
     this.onRemoteStreamCallback = onRemoteStream;
     this.remoteStream = new MediaStream();
@@ -173,6 +171,7 @@ export class CallService {
   async handleOfferAndCreateAnswer(offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {
     if (!this.peerConnection) throw new Error('Peer connection not created');
     await this.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    await this.flushPendingIceCandidates();
     const answer = await this.peerConnection.createAnswer();
     await this.peerConnection.setLocalDescription(answer);
     return answer;
@@ -181,17 +180,25 @@ export class CallService {
   async handleAnswer(answer: RTCSessionDescriptionInit): Promise<void> {
     if (this.peerConnection && this.peerConnection.signalingState !== 'stable') {
       await this.peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      await this.flushPendingIceCandidates();
     }
   }
 
   async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
-    if (this.peerConnection) {
+    if (this.peerConnection?.remoteDescription) {
       try {
         await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (e) {
         logger.warn('Error adding ICE candidate:', e);
       }
+    } else {
+      this.pendingIceCandidates.push(candidate);
     }
+  }
+
+  private async flushPendingIceCandidates(): Promise<void> {
+    const candidates = this.pendingIceCandidates.splice(0);
+    for (const candidate of candidates) await this.addIceCandidate(candidate);
   }
 
   toggleMicrophone(enabled: boolean): void {
@@ -241,9 +248,9 @@ export class CallService {
       this.peerConnection.close();
       this.peerConnection = null;
     }
+    this.pendingIceCandidates = [];
     logger.info('Call ended – peer connection closed');
   }
 }
 
 export const callService = new CallService();
-

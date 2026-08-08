@@ -82,6 +82,7 @@ export interface CallSession {
   id: string; // Call Room UUID
   caller_id: string;
   receiver_id: string;
+  participant_id: string;
   call_type: CallType;
   state: CallState;
   started_at?: string;
@@ -132,4 +133,3 @@ export interface SearchFilter {
   tab: 'all' | 'messages' | 'media' | 'links' | 'files';
   date_range?: string;
 }
-

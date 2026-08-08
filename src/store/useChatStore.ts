@@ -14,6 +14,7 @@ interface ChatState {
   targetMessageId: string | null;
   searchQuery: string;
   isRealtimeSubscribed: boolean;
+  stopRealtimeSubscription: () => void;
 
   loadInitialMessages: () => Promise<void>;
   loadMoreMessages: () => Promise<void>;
@@ -32,6 +33,8 @@ interface ChatState {
   setSearchQuery: (query: string) => void;
 }
 
+const PAGE_SIZE = 50;
+
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isLoadingMessages: false,
@@ -47,10 +50,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadInitialMessages: async () => {
     set({ isLoadingMessages: true });
     const msgs = await chatService.getMessages();
+    const visibleMessages = msgs.slice(-PAGE_SIZE);
     set({
-      messages: msgs,
+      messages: visibleMessages,
       isLoadingMessages: false,
-      hasMoreMessages: msgs.length > 50,
+      hasMoreMessages: msgs.length > PAGE_SIZE,
       pageOffset: 0,
     });
 
@@ -76,7 +80,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  loadMoreMessages: async () => {},
+  loadMoreMessages: async () => {
+    const { isLoadingMessages, hasMoreMessages, pageOffset, messages } = get();
+    if (isLoadingMessages || !hasMoreMessages) return;
+    set({ isLoadingMessages: true });
+    try {
+      const allMessages = await chatService.getMessages();
+      const nextOffset = pageOffset + PAGE_SIZE;
+      const end = Math.max(0, allMessages.length - pageOffset - PAGE_SIZE);
+      const start = Math.max(0, end - PAGE_SIZE);
+      const olderMessages = allMessages.slice(start, end);
+      set({
+        messages: [...olderMessages, ...messages],
+        pageOffset: nextOffset,
+        hasMoreMessages: start > 0,
+        isLoadingMessages: false,
+      });
+    } catch {
+      set({ isLoadingMessages: false });
+    }
+  },
+
+  stopRealtimeSubscription: () => {
+    chatService.unsubscribeRealtimeMessages();
+    set({ isRealtimeSubscribed: false });
+  },
 
   sendMessage: async (senderId, receiverId, content, messageType = 'text') => {
     const replyTarget = get().activeReplyTarget;

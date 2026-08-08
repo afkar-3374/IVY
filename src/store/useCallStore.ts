@@ -129,6 +129,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       id: `call_${Date.now()}`,
       caller_id: callerId,
       receiver_id: receiverId,
+      participant_id: callerId,
       call_type: callType,
       state: 'outgoing',
     };
@@ -225,6 +226,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       id: `call_${Date.now()}`,
       caller_id: callerId,
       receiver_id: receiverId,
+      participant_id: receiverId,
       call_type: callType,
       state: 'incoming',
     };
@@ -348,8 +350,8 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
     if (current) {
       callService.sendSignal(current.caller_id, { type: 'reject-call', senderId: current.receiver_id });
       chatService.sendMessage({
-        sender_id: current.caller_id,
-        receiver_id: current.receiver_id,
+        sender_id: current.participant_id,
+        receiver_id: current.caller_id,
         content: 'Declined voice call',
         message_type: 'system',
       });
@@ -366,17 +368,16 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
     const seconds = get().callSeconds;
 
     if (current) {
-      const isOutgoing = current.caller_id !== current.receiver_id;
-      const partnerId = isOutgoing ? current.receiver_id : current.caller_id;
-      callService.sendSignal(partnerId, { type: 'end-call', senderId: current.caller_id });
+      const partnerId = current.participant_id === current.caller_id ? current.receiver_id : current.caller_id;
+      callService.sendSignal(partnerId, { type: 'end-call', senderId: current.participant_id });
 
       if (current.state === 'connected') {
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
         const durationStr = seconds > 0 ? `${mins}m ${secs}s` : '< 1s';
         chatService.sendMessage({
-          sender_id: current.caller_id,
-          receiver_id: current.receiver_id,
+          sender_id: current.participant_id,
+          receiver_id: partnerId,
           content: `Voice call ended (${durationStr})`,
           message_type: 'system',
         });

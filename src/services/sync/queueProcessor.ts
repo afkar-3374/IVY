@@ -81,10 +81,11 @@ class QueueProcessor {
             const { local_uuid, content } = item.payload as { local_uuid: string; content: string };
             const now = new Date().toISOString();
             if (supabase) {
-              await supabase
+              const { error } = await supabase
                 .from('messages')
                 .update({ content, edited: true, edited_at: now })
                 .eq('local_uuid', local_uuid);
+              if (error) throw error;
             }
             const local = await ivyDb.messages.get(local_uuid);
             if (local) {
@@ -98,10 +99,11 @@ class QueueProcessor {
             const { local_uuid } = item.payload as { local_uuid: string };
             const now = new Date().toISOString();
             if (supabase) {
-              await supabase
+              const { error } = await supabase
                 .from('messages')
                 .update({ deleted: true, deleted_at: now, content: 'This message was deleted.' })
                 .eq('local_uuid', local_uuid);
+              if (error) throw error;
             }
             const local = await ivyDb.messages.get(local_uuid);
             if (local) {
@@ -114,10 +116,11 @@ class QueueProcessor {
           } else if (item.action_type === 'PIN_MESSAGE') {
             const { local_uuid, pinned } = item.payload as { local_uuid: string; pinned: boolean };
             if (supabase) {
-              await supabase
+              const { error } = await supabase
                 .from('messages')
                 .update({ pinned })
                 .eq('local_uuid', local_uuid);
+              if (error) throw error;
             }
             const local = await ivyDb.messages.get(local_uuid);
             if (local) {
@@ -128,10 +131,11 @@ class QueueProcessor {
           } else if (item.action_type === 'STAR_MESSAGE') {
             const { local_uuid, starred } = item.payload as { local_uuid: string; starred: boolean };
             if (supabase) {
-              await supabase
+              const { error } = await supabase
                 .from('messages')
                 .update({ starred })
                 .eq('local_uuid', local_uuid);
+              if (error) throw error;
             }
             const local = await ivyDb.messages.get(local_uuid);
             if (local) {
@@ -142,31 +146,34 @@ class QueueProcessor {
           } else if (item.action_type === 'ADD_REACTION') {
             const { message_id, profile_id, emoji } = item.payload as { message_id: string; profile_id: string; emoji: string };
             if (supabase) {
-              await supabase.from('message_reactions').insert({
+              const { error } = await supabase.from('message_reactions').insert({
                 message_id,
                 profile_id,
                 emoji
               });
+              if (error) throw error;
             }
             success = true;
           } else if (item.action_type === 'REMOVE_REACTION') {
             const { message_id, profile_id, emoji } = item.payload as { message_id: string; profile_id: string; emoji: string };
             if (supabase) {
-              await supabase
+              const { error } = await supabase
                 .from('message_reactions')
                 .delete()
                 .eq('message_id', message_id)
                 .eq('profile_id', profile_id)
                 .eq('emoji', emoji);
+              if (error) throw error;
             }
             success = true;
           } else if (item.action_type === 'MARK_READ') {
             const { message_uuids } = item.payload as { message_uuids: string[] };
             if (supabase && message_uuids.length > 0) {
-              await supabase
+              const { error } = await supabase
                 .from('messages')
                 .update({ status: 'read' })
                 .in('local_uuid', message_uuids);
+              if (error) throw error;
             }
             for (const uuid of message_uuids) {
               const local = await ivyDb.messages.get(uuid);

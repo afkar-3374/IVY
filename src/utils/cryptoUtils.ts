@@ -13,10 +13,10 @@ export async function hashLoginId(loginId: string): Promise<string> {
 
 /**
  * Pre-computed SHA-256 hashes for predefined couple users:
- * - User 1 (Afkar): "220609" -> "75c87e7f781db197d10006764516e87f174db9675317424683a9108c48a7ebdf"
- * - User 2 (Princess): "030309" -> "05c2a1e6ec0f80509a25b138612140a3ec6370bb073f47e30d170f2095f9c5d0"
+ * - User 1 (Afkar): "220609" -> "0bffe87dfa4bd113259d65cb7182428a8bba979dd60e89b641bcb835a2e1acfa"
+ * - User 2 (Princess): "030309" -> "1c5f1257f1b520659769643539651ea62813ca7ca87e567111588e6cd9d6a94c"
  */
 export const PREDEFINED_HASHES = {
-  USER_1: '75c87e7f781db197d10006764516e87f174db9675317424683a9108c48a7ebdf', // ID: 220609
-  USER_2: '05c2a1e6ec0f80509a25b138612140a3ec6370bb073f47e30d170f2095f9c5d0', // ID: 030309
+  USER_1: '0bffe87dfa4bd113259d65cb7182428a8bba979dd60e89b641bcb835a2e1acfa', // ID: 220609
+  USER_2: '1c5f1257f1b520659769643539651ea62813ca7ca87e567111588e6cd9d6a94c', // ID: 030309
 };

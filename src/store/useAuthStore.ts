@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { UserProfile } from '../types';
 import { hashLoginId } from '../utils/cryptoUtils';
 import { chatService } from '../services/chatService';
-import { DEFAULT_USER_1_PROFILE, DEFAULT_USER_2_PROFILE, USER_1_ID, USER_2_ID } from '../utils/constants';
+import { DEFAULT_USER_1_PROFILE, DEFAULT_USER_2_PROFILE, USER_2_ID } from '../utils/constants';
 import { logger } from '../services/logger/logger';
 import { useChatStore } from './useChatStore';
 
@@ -34,14 +34,6 @@ export const useAuthStore = create<AuthState>()(
 
           let profile = await chatService.getProfileByHash(hash);
           
-          if (!profile) {
-            if (loginId.trim() === '220609') {
-              profile = DEFAULT_USER_1_PROFILE;
-            } else if (loginId.trim() === '030309') {
-              profile = DEFAULT_USER_2_PROFILE;
-            }
-          }
-
           if (profile) {
             set({ user: profile, isAuthenticated: true, isLoading: false });
             // Re-fetch messages for newly authenticated user
@@ -61,7 +53,8 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         logger.info('User logged out');
         set({ user: null, isAuthenticated: false, error: null });
-        useChatStore.setState({ messages: [] });
+        useChatStore.getState().stopRealtimeSubscription();
+        useChatStore.setState({ messages: [], activeReplyTarget: null, selectedMessage: null, editingMessage: null });
       },
 
       updateCurrentUser: async (updates: Partial<UserProfile>) => {
