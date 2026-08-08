@@ -31,6 +31,7 @@ interface CallStoreState {
   toggleSpeaker: () => void;
   switchCamera: () => Promise<void>;
   listenToSignaling: (userId: string) => () => void;
+  recoverAfterResume: () => void;
   clearPermissionError: () => void;
   loadCallHistory: () => Promise<void>;
 }
@@ -467,6 +468,18 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
         set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, connectionState: null }));
       }
     });
+  },
+
+  recoverAfterResume: () => {
+    callService.recoverSignaling();
+    const current = get().currentCall;
+    const connectionState = callService.getConnectionState();
+    if (current && (connectionState === 'closed' || connectionState === 'failed')) {
+      stopRingtone();
+      clearAllTimers();
+      callService.endCall();
+      set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, connectionState: null }));
+    }
   },
 
   clearPermissionError: () => set(() => ({ permissionError: null })),

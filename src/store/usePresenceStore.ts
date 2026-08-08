@@ -2,6 +2,19 @@ import { create } from 'zustand';
 import type { PresenceState } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { formatLastSeen } from '../utils/date';
+import { logger } from '../services/logger/logger';
+
+let room: ReturnType<NonNullable<typeof supabase>['channel']> | null = null;
+let activeUserId: string | null = null;
+let recoveryTimer: number | null = null;
+let lifecycleCleanup: (() => void) | null = null;
+let ownPresence = {
+  online: true,
+  typing: false,
+  recording_audio: false,
+  uploading_media: false,
+  in_call: false,
+};
 
 interface PresenceStoreState {
   partnerPresence: PresenceState;
@@ -12,12 +25,20 @@ interface PresenceStoreState {
   setInCall: (inCall: boolean) => void;
   getPresenceSubtext: () => string;
   initPresenceChannel: (userId: string) => () => void;
+  refreshPresence: () => void;
 }
+
+const trackOwnPresence = () => {
+  if (!room) return;
+  room.track({ ...ownPresence, last_seen: new Date().toISOString() }).catch((error) => {
+    logger.warn('Unable to refresh presence:', error);
+  });
+};
 
 export const usePresenceStore = create<PresenceStoreState>((set, get) => ({
   partnerPresence: {
     profile_id: '',
-    online: true,
+    online: false,
     typing: false,
     recording_audio: false,
     uploading_media: false,
@@ -30,25 +51,25 @@ export const usePresenceStore = create<PresenceStoreState>((set, get) => ({
       partnerPresence: { ...state.partnerPresence, ...updates },
     })),
 
-  setTyping: (isTyping) =>
-    set((state) => ({
-      partnerPresence: { ...state.partnerPresence, typing: isTyping },
-    })),
+  setTyping: (isTyping) => {
+    ownPresence.typing = isTyping;
+    trackOwnPresence();
+  },
 
-  setRecordingAudio: (isRecording) =>
-    set((state) => ({
-      partnerPresence: { ...state.partnerPresence, recording_audio: isRecording },
-    })),
+  setRecordingAudio: (isRecording) => {
+    ownPresence.recording_audio = isRecording;
+    trackOwnPresence();
+  },
 
-  setUploadingMedia: (isUploading) =>
-    set((state) => ({
-      partnerPresence: { ...state.partnerPresence, uploading_media: isUploading },
-    })),
+  setUploadingMedia: (isUploading) => {
+    ownPresence.uploading_media = isUploading;
+    trackOwnPresence();
+  },
 
-  setInCall: (inCall) =>
-    set((state) => ({
-      partnerPresence: { ...state.partnerPresence, in_call: inCall },
-    })),
+  setInCall: (inCall) => {
+    ownPresence.in_call = inCall;
+    trackOwnPresence();
+  },
 
   getPresenceSubtext: () => {
     const { partnerPresence } = get();
@@ -63,15 +84,24 @@ export const usePresenceStore = create<PresenceStoreState>((set, get) => ({
   initPresenceChannel: (userId: string) => {
     if (!supabase) return () => {};
 
-    const room = supabase.channel('ivy_presence_room', {
+    if (room && activeUserId === userId) return () => {};
+    if (room) supabase.removeChannel(room);
+    lifecycleCleanup?.();
+    activeUserId = userId;
+
+    room = supabase.channel('ivy_presence_room', {
       config: { presence: { key: userId } },
     });
 
-    room
+    const activeRoom = room;
+
+    activeRoom
       .on('presence', { event: 'sync' }, () => {
-        const state = room.presenceState();
+        const state = activeRoom.presenceState();
+        let foundPartner = false;
         Object.keys(state).forEach((key) => {
           if (key !== userId) {
+            foundPartner = true;
             const presences = state[key] as any[];
             if (presences && presences.length > 0) {
               const latest = presences[presences.length - 1];
@@ -89,6 +119,9 @@ export const usePresenceStore = create<PresenceStoreState>((set, get) => ({
             }
           }
         });
+        if (!foundPartner) {
+          set((state) => ({ partnerPresence: { ...state.partnerPresence, online: false, typing: false, recording_audio: false, uploading_media: false, in_call: false } }));
+        }
       })
       .on('presence', { event: 'leave' }, ({ leftPresences }) => {
         if (leftPresences && leftPresences.length > 0) {
@@ -104,21 +137,46 @@ export const usePresenceStore = create<PresenceStoreState>((set, get) => ({
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          await room.track({
-            online: true,
-            typing: false,
-            recording_audio: false,
-            uploading_media: false,
-            in_call: false,
-            last_seen: new Date().toISOString(),
-          });
+          trackOwnPresence();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          if (recoveryTimer === null) {
+            recoveryTimer = window.setTimeout(() => {
+              recoveryTimer = null;
+              if (activeUserId === userId) get().refreshPresence();
+            }, 1500);
+          }
         }
       });
 
-    return () => {
-      if (supabase && room) {
-        supabase.removeChannel(room);
-      }
+    const recover = () => get().refreshPresence();
+    const onVisible = () => { if (document.visibilityState === 'visible') recover(); };
+    window.addEventListener('online', recover);
+    window.addEventListener('pageshow', recover);
+    document.addEventListener('visibilitychange', onVisible);
+    lifecycleCleanup = () => {
+      window.removeEventListener('online', recover);
+      window.removeEventListener('pageshow', recover);
+      document.removeEventListener('visibilitychange', onVisible);
     };
+
+    return () => {
+      if (activeUserId !== userId) return;
+      lifecycleCleanup?.();
+      lifecycleCleanup = null;
+      if (recoveryTimer !== null) clearTimeout(recoveryTimer);
+      recoveryTimer = null;
+      if (supabase && room) supabase.removeChannel(room);
+      room = null;
+      activeUserId = null;
+    };
+  },
+
+  refreshPresence: () => {
+    if (!activeUserId) return;
+    const userId = activeUserId;
+    if (room && supabase) supabase.removeChannel(room);
+    room = null;
+    activeUserId = null;
+    get().initPresenceChannel(userId);
   },
 }));

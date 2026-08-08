@@ -84,6 +84,7 @@ export const CallOverlay: React.FC = () => {
     toggleMute,
     toggleSpeaker,
     listenToSignaling,
+    recoverAfterResume,
     clearPermissionError,
   } = useCallStore();
 
@@ -96,6 +97,21 @@ export const CallOverlay: React.FC = () => {
       return cleanup;
     }
   }, [currentUser?.id]);
+
+  useEffect(() => {
+    const recover = () => recoverAfterResume();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') recover();
+    };
+    window.addEventListener('online', recover);
+    window.addEventListener('pageshow', recover);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('online', recover);
+      window.removeEventListener('pageshow', recover);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [recoverAfterResume]);
 
   /* ── Bind remote audio stream ── */
   useEffect(() => {

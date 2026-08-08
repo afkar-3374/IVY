@@ -29,6 +29,9 @@ export class CallService {
   private onSignalingEventCallback: ((event: SignalingEvent) => void) | null = null;
   private onConnectionStateChange: ((state: RTCPeerConnectionState) => void) | null = null;
   private pendingIceCandidates: RTCIceCandidateInit[] = [];
+  private signalingUserId: string | null = null;
+  private signalingStatus = 'CLOSED';
+  private recoveryTimer: number | null = null;
 
   setConnectionStateListener(fn: (state: RTCPeerConnectionState) => void) {
     this.onConnectionStateChange = fn;
@@ -39,16 +42,23 @@ export class CallService {
 
     if (!supabase) return () => {};
 
+    if (this.channel && this.signalingUserId === userId) {
+      return () => this.stopSignaling(userId);
+    }
+
     const channelName = 'ivy_call_signaling';
     if (this.channel) {
       supabase.removeChannel(this.channel);
     }
 
-    this.channel = supabase.channel(channelName, {
+    const channel = supabase.channel(channelName, {
       config: { broadcast: { self: false } },
     });
+    this.channel = channel;
+    this.signalingUserId = userId;
+    this.signalingStatus = 'CONNECTING';
 
-    this.channel
+    channel
       .on('broadcast', { event: 'signal' }, ({ payload }) => {
         if (!payload || (payload as { targetUserId?: string }).targetUserId !== userId) return;
         logger.info('Received call signal:', payload?.type);
@@ -57,14 +67,46 @@ export class CallService {
           this.onSignalingEventCallback(event);
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        this.signalingStatus = status;
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          this.scheduleRecovery();
+        }
+      });
 
     return () => {
-      if (supabase && this.channel) {
-        supabase.removeChannel(this.channel);
-        this.channel = null;
-      }
+      this.stopSignaling(userId);
     };
+  }
+
+  recoverSignaling(): void {
+    if (!this.signalingUserId || !this.onSignalingEventCallback || !supabase) return;
+    const userId = this.signalingUserId;
+    const callback = this.onSignalingEventCallback;
+    if (this.channel) supabase.removeChannel(this.channel);
+    this.channel = null;
+    this.signalingStatus = 'CLOSED';
+    this.initSignaling(userId, callback);
+  }
+
+  private scheduleRecovery(): void {
+    if (this.recoveryTimer !== null || !this.signalingUserId) return;
+    this.recoveryTimer = window.setTimeout(() => {
+      this.recoveryTimer = null;
+      this.recoverSignaling();
+    }, 1500);
+  }
+
+  private stopSignaling(userId: string): void {
+    if (this.signalingUserId !== userId) return;
+    if (this.recoveryTimer !== null) {
+      clearTimeout(this.recoveryTimer);
+      this.recoveryTimer = null;
+    }
+    if (supabase && this.channel) supabase.removeChannel(this.channel);
+    this.channel = null;
+    this.signalingUserId = null;
+    this.signalingStatus = 'CLOSED';
   }
 
   async sendSignal(targetUserId: string, payload: SignalingEvent): Promise<void> {
@@ -73,7 +115,10 @@ export class CallService {
       return;
     }
     try {
-      if (!this.channel) throw new Error('Call signaling is not initialized');
+      if (!this.channel || this.signalingStatus !== 'SUBSCRIBED') {
+        this.recoverSignaling();
+        throw new Error('Call signaling is reconnecting');
+      }
       const result = await this.channel.send({
         type: 'broadcast',
         event: 'signal',
