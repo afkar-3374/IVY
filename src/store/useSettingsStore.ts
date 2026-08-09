@@ -7,14 +7,12 @@ interface SettingsState {
   theme: ThemeMode;
   wallpaper: WallpaperPreset;
   customWallpaperUrl: string;
-  // Granular notification preferences
   notificationsEnabled: boolean;
   notifyMessages: boolean;
   notifyCalls: boolean;
   notifySound: boolean;
   notifyVibration: boolean;
   dndEnabled: boolean;
-
   setTheme: (theme: ThemeMode) => void;
   setWallpaper: (wallpaper: WallpaperPreset) => void;
   setCustomWallpaper: (dataUrl: string) => void;
@@ -59,37 +57,25 @@ export const useSettingsStore = create<SettingsState>()(
 
       setNotificationsEnabled: (enabled) => {
         set({ notificationsEnabled: enabled });
-        const s = get();
-        notificationService.updatePreferences({
-          enabled,
-          messages: s.notifyMessages,
-          calls: s.notifyCalls,
-          sound: s.notifySound,
-          vibration: s.notifyVibration,
-          dnd: s.dndEnabled,
-        });
+        const state = get();
+        notificationService.updatePreferences({ enabled, messages: state.notifyMessages, calls: state.notifyCalls, sound: state.notifySound, vibration: state.notifyVibration, dnd: state.dndEnabled });
       },
-
       setNotifyMessages: (notifyMessages) => {
         set({ notifyMessages });
         notificationService.updatePreferences({ messages: notifyMessages });
       },
-
       setNotifyCalls: (notifyCalls) => {
         set({ notifyCalls });
         notificationService.updatePreferences({ calls: notifyCalls });
       },
-
       setNotifySound: (notifySound) => {
         set({ notifySound });
         notificationService.updatePreferences({ sound: notifySound });
       },
-
       setNotifyVibration: (notifyVibration) => {
         set({ notifyVibration });
         notificationService.updatePreferences({ vibration: notifyVibration });
       },
-
       setDndEnabled: (dndEnabled) => {
         set({ dndEnabled });
         notificationService.setDND(dndEnabled);

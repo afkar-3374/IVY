@@ -63,8 +63,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     if (!get().isRealtimeSubscribed) {
       set({ isRealtimeSubscribed: true });
-      chatService.subscribeToRealtimeMessages((incomingMsg) =>
-      {
+      chatService.subscribeToRealtimeMessages((incomingMsg) => {
         set((state) => {
           const exists = state.messages.some(
             (m) => m.local_uuid === incomingMsg.local_uuid || m.id === incomingMsg.id
@@ -78,28 +77,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ),
             };
           }
-
-          // Fire notification for incoming partner messages
           const currentUserId = useAuthStore.getState().user?.id;
           const isIncoming = Boolean(currentUserId) &&
             incomingMsg.sender_id !== currentUserId &&
             incomingMsg.message_type !== 'system';
           if (isIncoming) {
-            // Determine partner name from constants
-            const senderProfile =
-              incomingMsg.sender_id === USER_1_ID
-                ? DEFAULT_USER_1_PROFILE
-                : DEFAULT_USER_2_PROFILE;
+            const senderProfile = incomingMsg.sender_id === USER_1_ID
+              ? DEFAULT_USER_1_PROFILE
+              : DEFAULT_USER_2_PROFILE;
             notificationService.notifyNewMessage(
               incomingMsg.local_uuid || incomingMsg.id || String(Date.now()),
               senderProfile.nickname || senderProfile.display_name,
-              typeof incomingMsg.content === 'string'
-                ? incomingMsg.content.slice(0, 80)
-                : '',
+              typeof incomingMsg.content === 'string' ? incomingMsg.content.slice(0, 80) : '',
               incomingMsg.message_type
             );
           }
-
           const nextMessages = [...state.messages, incomingMsg];
           if (isIncoming) {
             const unreadCount = nextMessages.filter((message) =>
@@ -181,6 +173,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         m.local_uuid === localUuid ? { ...m, status: 'Sending' } : m
       ),
     }));
+    await notificationService.clearBadge();
   },
 
   editMessage: async (localUuid, newContent) => {
@@ -274,7 +267,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         m.sender_id === partnerId && m.status !== 'Read' ? { ...m, status: 'Read' } : m
       ),
     }));
-    await notificationService.clearBadge();
   },
 
   setActiveReplyTarget: (msg) => set({ activeReplyTarget: msg }),

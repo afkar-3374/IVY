@@ -41,7 +41,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     notificationService.updatePreferences({ enabled: notificationsEnabled, messages: notifyMessages, calls: notifyCalls, sound: notifySound, vibration: notifyVibration, dnd: dndEnabled });
   }, [notificationsEnabled, notifyMessages, notifyCalls, notifySound, notifyVibration, dndEnabled]);
 
-
   return (
     <div className="min-h-screen w-full flex justify-center bg-[#FDF8F6] dark:bg-[#16151A] text-stone-900 dark:text-stone-100 font-sans antialiased overflow-x-hidden">
       {/* Desktop & Mobile Responsive Frame Container */}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -21,8 +21,6 @@ import {
   Plus,
   Paperclip,
   Phone,
-  GalleryHorizontal,
-  FolderOpen,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useChatStore } from '../store/useChatStore';
@@ -63,7 +61,6 @@ const ChatPage: React.FC = () => {
   const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [viewingMediaMessage, setViewingMediaMessage] = useState<Message | null>(null);
-  const [isAttachTrayOpen, setIsAttachTrayOpen] = useState(false);
 
   // Voice Note Recording States
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
@@ -462,8 +459,7 @@ const ChatPage: React.FC = () => {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      onClick={() => isAttachTrayOpen && setIsAttachTrayOpen(false)}
-      className={`flex-1 flex flex-col overflow-hidden relative ${getWallpaperClass()}`}
+      className={`flex-1 flex flex-col h-screen overflow-hidden relative ${getWallpaperClass()}`}
       style={customWallpaperStyle}
     >
       {/* Hidden File Inputs */}
@@ -501,8 +497,8 @@ const ChatPage: React.FC = () => {
         </div>
       )}
 
-      {/* Header — fixed, never scrolls */}
-      <header className="flex-shrink-0 z-30 bg-white/95 dark:bg-[#1E1D24]/95 backdrop-blur-md px-4 py-3 border-b border-stone-100 dark:border-stone-800/80 flex items-center justify-between shadow-soft">
+      {/* Header */}
+      <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#1E1D24]/95 backdrop-blur-md px-4 py-3 border-b border-stone-100 dark:border-stone-800/80 flex items-center justify-between shadow-soft flex-shrink-0">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/settings')}
@@ -608,53 +604,29 @@ const ChatPage: React.FC = () => {
         </div>
       )}
 
-      {/* Messages Stream — only this scrolls */}
+      {/* Messages Stream Container */}
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-3 py-3 relative"
-        style={{ overscrollBehavior: 'contain' }}
+        className="flex-1 overflow-y-auto p-4 space-y-3 relative"
       >
         {isLoadingMessages && messages.length === 0 && (
-          <div className="flex flex-col gap-2.5 px-2 py-3">
-            {[80, 60, 72, 55, 90].map((w, i) => (
-              <div key={i} className={`skeleton h-9 rounded-3xl ${i % 2 === 0 ? 'ml-auto' : 'mr-auto'}`} style={{ width: `${w}%`, maxWidth: 260 }} />
-            ))}
-          </div>
+          <div className="text-center py-4 text-xs text-stone-400">Loading messages...</div>
         )}
 
         {messages.map((msg, idx) => {
           const prevMsg = messages[idx - 1];
-          const nextMsg = messages[idx + 1];
-
           const showDateSeparator =
             !prevMsg ||
             new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString();
 
-          // Consecutive grouping: same sender, within 2 minutes
-          const CONSEC_MS = 120_000;
-          const isConsecutive =
-            !showDateSeparator &&
-            msg.message_type !== 'system' &&
-            prevMsg?.message_type !== 'system' &&
-            prevMsg?.sender_id === msg.sender_id &&
-            Math.abs(new Date(msg.created_at).getTime() - new Date(prevMsg.created_at).getTime()) < CONSEC_MS;
-
-          const isLastInGroup =
-            !nextMsg ||
-            nextMsg.message_type === 'system' ||
-            msg.message_type === 'system' ||
-            nextMsg.sender_id !== msg.sender_id ||
-            new Date(nextMsg.created_at).toDateString() !== new Date(msg.created_at).toDateString() ||
-            Math.abs(new Date(nextMsg.created_at).getTime() - new Date(msg.created_at).getTime()) >= CONSEC_MS;
-
           return (
             <React.Fragment key={msg.local_uuid || msg.id}>
               {showDateSeparator && (
-                <div className="flex justify-center my-4">
-                  <div className="px-4 py-1 rounded-full bg-white/70 dark:bg-stone-800/70 text-[11px] font-bold text-stone-500 dark:text-stone-400 shadow-soft backdrop-blur-md border border-stone-200/50 dark:border-stone-700/40 select-none">
+                <div className="flex justify-center my-3">
+                  <span className="px-3 py-1 bg-white/80 dark:bg-stone-800/80 rounded-full text-[11px] font-semibold text-stone-500 dark:text-stone-400 shadow-soft backdrop-blur-sm border border-stone-100 dark:border-stone-700/50">
                     {formatDateSeparator(msg.created_at)}
-                  </div>
+                  </span>
                 </div>
               )}
 
@@ -666,14 +638,12 @@ const ChatPage: React.FC = () => {
                 onSwipeToReply={(m) => setActiveReplyTarget(m)}
                 onRetry={(m) => retryFailedMessage(m.local_uuid)}
                 onJumpToOriginal={jumpToOriginalMessage}
-                isConsecutive={isConsecutive}
-                isLastInGroup={isLastInGroup}
               />
             </React.Fragment>
           );
         })}
 
-        <div ref={messagesEndRef} className="h-2" />
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Scroll to Bottom Floating Button */}
@@ -687,29 +657,31 @@ const ChatPage: React.FC = () => {
         </button>
       )}
 
-      {/* Reply Composer Banner */}
+      {/* Animated Reply Composer Banner */}
       <AnimatePresence>
         {activeReplyTarget && !isRecordingVoice && (
           <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.15 }}
-            className="flex-shrink-0 bg-white/95 dark:bg-[#1E1D24]/95 px-4 py-2 border-t border-stone-100 dark:border-stone-800/60 flex items-center gap-3 z-20"
+            initial={{ opacity: 0, y: 10, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.98 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white/95 dark:bg-[#1E1D24]/95 px-4 py-2 border-t border-stone-200 dark:border-stone-800 flex items-center justify-between z-20 flex-shrink-0 shadow-sm"
           >
-            <div className="w-0.5 self-stretch bg-[#C95565] rounded-full flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-bold text-[#C95565] mb-0.5">
-                {activeReplyTarget.sender_id === currentUser?.id ? 'You' : partnerDisplayName}
-              </p>
-              <p className="text-[12px] text-stone-500 dark:text-stone-400 truncate">
-                {activeReplyTarget.deleted ? 'Deleted message' : activeReplyTarget.content}
+            <div className="border-l-2 border-[#C95565] pl-3 text-xs flex-1 min-w-0 pr-2">
+              <span className="font-bold text-[#C95565] flex items-center gap-1">
+                {getReplyIcon(activeReplyTarget.message_type)}
+                <span>
+                  Replying to {activeReplyTarget.sender_id === currentUser?.id ? 'Yourself' : partnerDisplayName}
+                </span>
+              </span>
+              <p className="text-stone-600 dark:text-stone-300 truncate max-w-sm mt-0.5 text-xs">
+                {activeReplyTarget.deleted ? 'This message was deleted.' : activeReplyTarget.content}
               </p>
             </div>
             <button
               onClick={() => setActiveReplyTarget(null)}
-              className="p-1.5 rounded-full text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 active-scale flex-shrink-0"
-              aria-label="Cancel reply"
+              className="p-1 rounded-full text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 active-scale"
+              title="Cancel Reply (Esc)"
             >
               <X className="w-4 h-4" />
             </button>
@@ -717,146 +689,148 @@ const ChatPage: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Message Input / Voice Note Recorder Footer — fixed, never scrolls */}
-      <footer className="flex-shrink-0 z-30 w-full bg-white/95 dark:bg-[#1E1D24]/95 backdrop-blur-md border-t border-stone-100/80 dark:border-stone-800/60 pb-safe">
+      {/* Message Input / Voice Note Recorder Footer */}
+      <footer className="z-30 w-full bg-white/95 dark:bg-[#1E1D24]/95 backdrop-blur-md p-3 border-t border-stone-100 dark:border-stone-800 pb-safe flex-shrink-0 shadow-soft">
         {isRecordingVoice ? (
-          /* Voice Recording Bar */
-          <div className="flex items-center gap-3 px-3 py-2.5 max-w-2xl mx-auto">
-            <button type="button" onClick={cancelRecording}
-              className="w-9 h-9 rounded-full bg-rose-100 dark:bg-rose-950/40 text-[#C95565] flex items-center justify-center flex-shrink-0 active-scale"
-              title="Discard">
-              <Trash2 className="w-4 h-4" />
+          /* Live Voice Note Recording Bar */
+          <div className="flex items-center justify-between gap-3 max-w-2xl mx-auto px-2 py-1">
+            <button
+              type="button"
+              onClick={cancelRecording}
+              className="p-2.5 rounded-full bg-rose-100 text-[#C95565] hover:bg-rose-200 active-scale"
+              title="Discard Recording"
+            >
+              <Trash2 className="w-5 h-5" />
             </button>
 
-            <div className="flex-1 flex items-center gap-2.5 bg-stone-100 dark:bg-stone-800/70 py-2 px-3 rounded-2xl">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping flex-shrink-0" />
-              <span className="text-xs font-bold text-red-500 font-mono tabular-nums min-w-[36px]">{formatTimer(recordingSeconds)}</span>
-              <div className="flex items-end gap-0.5 h-5 flex-1 justify-center overflow-hidden">
-                {[30, 60, 40, 90, 70, 50, 80, 40, 60, 100, 50, 30, 70, 45].map((h, i) => {
-                  const dh = Math.min(100, Math.max(15, h * (audioLevel / 38)));
-                  return <div key={i} className="w-0.5 rounded-full bg-[#C95565] transition-all duration-75" style={{ height: isRecordingPaused ? '25%' : `${dh}%` }} />;
+            <div className="flex-1 flex items-center justify-center gap-3 bg-stone-100 dark:bg-stone-800/80 py-1.5 px-4 rounded-full">
+              <span className="w-3 h-3 rounded-full bg-red-500 animate-ping flex-shrink-0" />
+              <span className="text-xs font-bold text-red-500 font-mono">
+                {formatTimer(recordingSeconds)}
+              </span>
+
+              {/* Frequency Waveform Animation */}
+              <div className="flex items-center gap-0.5 h-4 flex-1 justify-center max-w-[120px]">
+                {[30, 60, 40, 90, 70, 50, 80, 40, 60, 100, 50, 30].map((h, i) => {
+                  const dynamicH = Math.min(100, Math.max(20, h * (audioLevel / 40)));
+                  return (
+                    <div
+                      key={i}
+                      className="w-1 rounded-full bg-[#C95565] transition-all duration-75"
+                      style={{ height: isRecordingPaused ? '30%' : `${dynamicH}%` }}
+                    />
+                  );
                 })}
               </div>
-              <button type="button" onClick={isRecordingPaused ? resumeRecording : pauseRecording}
-                className="p-1 rounded-full text-stone-500 hover:bg-stone-200 dark:hover:bg-stone-700 active-scale" title={isRecordingPaused ? 'Resume' : 'Pause'}>
-                {isRecordingPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+
+              <button
+                type="button"
+                onClick={isRecordingPaused ? resumeRecording : pauseRecording}
+                className="p-1.5 rounded-full text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 active-scale"
+                title={isRecordingPaused ? 'Resume Recording' : 'Pause Recording'}
+              >
+                {isRecordingPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
               </button>
             </div>
 
-            <button type="button" onClick={stopAndSendVoiceNote}
-              className="w-10 h-10 rounded-full bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-soft active-scale hover:bg-[#B34757]">
+            <button
+              type="button"
+              onClick={stopAndSendVoiceNote}
+              className="w-10 h-10 rounded-full bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-soft active-scale hover:bg-[#B34757]"
+              title="Send Voice Note"
+            >
               <Send className="w-4 h-4 ml-0.5" />
             </button>
           </div>
         ) : (
           /* Standard Input Bar */
-          <div className="px-3 py-2 max-w-2xl mx-auto">
-            {/* Attachment Tray — slides in above input */}
-            <AnimatePresence>
-              {isAttachTrayOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                  transition={{ duration: 0.15, ease: [0.34, 1.2, 0.64, 1] }}
-                  className="flex items-center gap-3 mb-2.5 px-1"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {[
-                    { label: 'Gallery', icon: <GalleryHorizontal className="w-5 h-5" />, color: 'bg-violet-100 dark:bg-violet-950/50 text-violet-600 dark:text-violet-300', action: () => { galleryInputRef.current?.click(); setIsAttachTrayOpen(false); } },
-                    { label: 'Camera', icon: <Camera className="w-5 h-5" />, color: 'bg-sky-100 dark:bg-sky-950/50 text-sky-600 dark:text-sky-300', action: () => { cameraInputRef.current?.click(); setIsAttachTrayOpen(false); } },
-                    { label: 'File', icon: <FolderOpen className="w-5 h-5" />, color: 'bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-300', action: () => { documentInputRef.current?.click(); setIsAttachTrayOpen(false); } },
-                  ].map((item, i) => (
-                    <motion.button
-                      key={item.label}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      type="button"
-                      onClick={item.action}
-                      className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl ${item.color} active-scale flex-1`}
-                    >
-                      {item.icon}
-                      <span className="text-[10px] font-bold">{item.label}</span>
-                    </motion.button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
+          <form onSubmit={handleSend} className="flex items-center gap-2 max-w-2xl mx-auto">
+            {/* Gallery Picker Trigger */}
+            <button
+              type="button"
+              onClick={() => galleryInputRef.current?.click()}
+              className="w-10 h-10 rounded-full bg-stone-100 dark:bg-stone-800 text-[#C95565] flex items-center justify-center flex-shrink-0 active-scale hover:bg-rose-50 dark:hover:bg-stone-700"
+              title="Attach Images or Videos"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
 
-            <form onSubmit={handleSend} className="flex items-center gap-2">
-              {/* Attach toggle */}
-              <motion.button
+            {/* Document File Attachment Trigger */}
+            <button
+              type="button"
+              onClick={() => documentInputRef.current?.click()}
+              className="w-10 h-10 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 flex items-center justify-center flex-shrink-0 active-scale hover:text-[#C95565]"
+              title="Attach Document or File"
+            >
+              <Paperclip className="w-5 h-5" />
+            </button>
+
+            {/* Camera Capture Trigger */}
+            <button
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
+              className="w-10 h-10 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 flex items-center justify-center flex-shrink-0 active-scale hover:text-[#C95565]"
+              title="Take Photo or Video"
+            >
+              <Camera className="w-5 h-5" />
+            </button>
+
+            <div className="flex-1 relative flex items-center">
+              <input
+                ref={inputRef}
+                type="text"
+                value={inputContent}
+                onChange={(e) => {
+                  setInputContent(e.target.value);
+                  triggerTyping();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setActiveReplyTarget(null);
+                    setEditingMessage(null);
+                  }
+                }}
+                placeholder={
+                  editingMessage
+                    ? 'Edit message...'
+                    : activeReplyTarget
+                    ? 'Type your reply...'
+                    : 'Type a message...'
+                }
+                className="w-full bg-stone-100 dark:bg-[#16151A] text-stone-900 dark:text-stone-100 text-sm px-4 py-2.5 rounded-full border border-transparent focus:outline-none focus:border-[#C95565]/40 pr-10"
+              />
+              <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); setIsAttachTrayOpen(p => !p); }}
-                animate={{ rotate: isAttachTrayOpen ? 45 : 0 }}
-                transition={{ duration: 0.2 }}
-                className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 active-scale transition-colors ${
-                  isAttachTrayOpen
-                    ? 'bg-[#C95565] text-white'
-                    : 'bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:text-[#C95565]'
-                }`}
-                title="Attach"
+                onClick={() => {
+                  setSelectedMessage(null);
+                  setIsEmojiPickerOpen((prev) => !prev);
+                }}
+                className="absolute right-3 text-stone-400 hover:text-[#C95565]"
+                title="Emoji Picker"
               >
-                <Plus className="w-5 h-5" />
-              </motion.button>
+                <Smile className="w-5 h-5" />
+              </button>
+            </div>
 
-              {/* Text input */}
-              <div className="flex-1 relative flex items-center">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={inputContent}
-                  onChange={(e) => { setInputContent(e.target.value); triggerTyping(); }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') { setActiveReplyTarget(null); setEditingMessage(null); }
-                  }}
-                  placeholder={editingMessage ? 'Edit message…' : activeReplyTarget ? 'Type your reply…' : 'Message…'}
-                  className="w-full bg-stone-100 dark:bg-[#1A1920] text-stone-900 dark:text-stone-100 text-sm px-4 py-2.5 rounded-2xl border border-transparent focus:outline-none focus:border-[#C95565]/30 transition-colors pr-9"
-                />
-                <button
-                  type="button"
-                  onClick={() => { setSelectedMessage(null); setIsEmojiPickerOpen(p => !p); }}
-                  className="absolute right-2.5 text-stone-400 hover:text-[#C95565] transition-colors"
-                  title="Emoji"
-                >
-                  <Smile className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} />
-                </button>
-              </div>
-
-              {/* Send / Mic */}
-              <AnimatePresence mode="wait">
-                {inputContent.trim() ? (
-                  <motion.button
-                    key="send"
-                    initial={{ scale: 0.6, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.6, opacity: 0 }}
-                    transition={{ duration: 0.12 }}
-                    type="submit"
-                    className="w-10 h-10 rounded-full bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-soft active-scale hover:bg-[#B34757]"
-                    title="Send"
-                  >
-                    <Send className="w-4 h-4 ml-0.5" />
-                  </motion.button>
-                ) : (
-                  <motion.button
-                    key="mic"
-                    initial={{ scale: 0.6, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.6, opacity: 0 }}
-                    transition={{ duration: 0.12 }}
-                    type="button"
-                    onClick={startRecording}
-                    className="w-10 h-10 rounded-full bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-soft active-scale hover:bg-[#B34757]"
-                    title="Voice Note"
-                  >
-                    <Mic className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} />
-                  </motion.button>
-                )}
-              </AnimatePresence>
-            </form>
-          </div>
+            {inputContent.trim() ? (
+              <button
+                type="submit"
+                className="w-10 h-10 rounded-full bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-soft active-scale hover:bg-[#B34757]"
+                title="Send"
+              >
+                <Send className="w-4 h-4 ml-0.5" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={startRecording}
+                className="w-10 h-10 rounded-full bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-soft active-scale hover:bg-[#B34757]"
+                title="Record Voice Note"
+              >
+                <Mic className="w-5 h-5" />
+              </button>
+            )}
+          </form>
         )}
       </footer>
 

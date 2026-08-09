@@ -4,8 +4,6 @@ import { callService, type SignalingEvent } from '../services/callService';
 import { chatService } from '../services/chatService';
 import { logger } from '../services/logger/logger';
 import { ivyDb } from '../db/ivyDb';
-import { notificationService } from '../services/notificationService';
-import { USER_1_ID, DEFAULT_USER_1_PROFILE, DEFAULT_USER_2_PROFILE } from '../utils/constants';
 
 const CALL_TIMEOUT_SECONDS = 45; // Unanswered call timeout
 const RECONNECT_TIMEOUT_SECONDS = 15; // Connection loss timeout
@@ -241,11 +239,15 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
     set(() => ({ currentCall: newSession, callSeconds: 0, permissionError: null }));
     playRingtone();
 
-    // Trigger notification for incoming call
-    const callerProfile =
-      callerId === USER_1_ID ? DEFAULT_USER_1_PROFILE : DEFAULT_USER_2_PROFILE;
-    const callerName = callerProfile.nickname || callerProfile.display_name;
-    notificationService.notifyIncomingCall(callType, callerName);
+    // Trigger system notification if app is hidden
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted' && document.hidden) {
+      try {
+        new Notification(callType === 'video' ? 'Incoming Video Call' : 'Incoming Voice Call', {
+          body: `Your partner is ${callType === 'video' ? 'video ' : ''}calling you on Ivy`,
+          icon: '/pwa-192x192.png',
+        });
+      } catch {}
+    }
 
     // Stash offer for acceptCall
     (window as any).__pendingCallOffer = offer;
@@ -427,8 +429,11 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
     const nextFacing = get().facingMode === 'user' ? 'environment' : 'user';
     try {
       const stream = await callService.getLocalMedia('video', nextFacing);
+      await callService.replaceLocalStream(stream);
       set(() => ({ facingMode: nextFacing, localStream: stream }));
-    } catch {}
+    } catch (error) {
+      logger.warn('Unable to switch camera:', error);
+    }
   },
 
   listenToSignaling: (userId: string) => {

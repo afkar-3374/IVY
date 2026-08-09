@@ -292,6 +292,18 @@ export class CallService {
     this.localStream?.getVideoTracks().forEach((t) => (t.enabled = enabled));
   }
 
+  async replaceLocalStream(stream: MediaStream): Promise<void> {
+    if (!this.peerConnection) return;
+
+    const tracksByKind = new Map(stream.getTracks().map((track) => [track.kind, track]));
+    await Promise.all(
+      this.peerConnection.getSenders().map(async (sender) => {
+        const replacement = sender.track ? tracksByKind.get(sender.track.kind) : undefined;
+        if (replacement) await sender.replaceTrack(replacement);
+      })
+    );
+  }
+
   async restartIce(): Promise<RTCSessionDescriptionInit | null> {
     if (!this.peerConnection) return null;
     try {
