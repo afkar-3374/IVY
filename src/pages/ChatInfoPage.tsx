@@ -251,6 +251,13 @@ const ChatInfoPage: React.FC = () => {
                     return m > 0 ? `${m}m ${s}s` : `${s}s`;
                   };
 
+                  const CallIcon = () => {
+                    if (log.status === 'missed') return <PhoneMissed className="w-4 h-4" />;
+                    if (log.status === 'rejected' || log.status === 'busy') return <PhoneOff className="w-4 h-4" />;
+                    if (log.call_type === 'video') return <Video className="w-4 h-4" />;
+                    return <PhoneCall className="w-4 h-4" />;
+                  };
+
                   return (
                     <div
                       key={log.id}
@@ -258,13 +265,7 @@ const ChatInfoPage: React.FC = () => {
                     >
                       <div className="flex items-center gap-3">
                         <div className={`w-9 h-9 rounded-full flex items-center justify-center border ${statusColor}`}>
-                          {log.status === 'missed' ? (
-                            <PhoneMissed className="w-4 h-4" />
-                          ) : log.status === 'rejected' || log.status === 'busy' ? (
-                            <PhoneOff className="w-4 h-4" />
-                          ) : (
-                            <PhoneCall className="w-4 h-4" />
-                          )}
+                          <CallIcon />
                         </div>
                         <div>
                           <div className="flex items-center gap-1.5">
@@ -274,6 +275,11 @@ const ChatInfoPage: React.FC = () => {
                             <span className="text-[10px] font-semibold text-stone-400">
                               · {isOutgoing ? 'Outgoing' : 'Incoming'}
                             </span>
+                            {log.call_type === 'video' && (
+                              <span className="text-[9px] font-bold text-violet-500 bg-violet-50 dark:bg-violet-950/40 px-1.5 py-0.5 rounded-full">
+                                Video
+                              </span>
+                            )}
                           </div>
                           <p className="text-[11px] text-stone-500 dark:text-stone-400">
                             {formatDateSeparator(log.created_at)} at {formatMessageTime(log.created_at)} ·{' '}
@@ -285,14 +291,14 @@ const ChatInfoPage: React.FC = () => {
                       <button
                         onClick={() => {
                           if (currentUser && partnerUser) {
-                            useCallStore.getState().startCall(currentUser.id, partnerUser.id, 'audio');
+                            useCallStore.getState().startCall(currentUser.id, partnerUser.id, log.call_type);
                           }
                         }}
                         className="p-2 rounded-full bg-white dark:bg-stone-800 shadow-soft text-[#C95565] hover:scale-110 active:scale-95 transition-all"
-                        title="Redial"
-                        aria-label="Redial"
+                        title={log.call_type === 'video' ? 'Video call again' : 'Call again'}
+                        aria-label={log.call_type === 'video' ? 'Video call again' : 'Call again'}
                       >
-                        <Phone className="w-4 h-4" />
+                        {log.call_type === 'video' ? <Video className="w-4 h-4" /> : <Phone className="w-4 h-4" />}
                       </button>
                     </div>
                   );

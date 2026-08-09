@@ -1,3 +1,6 @@
+/* ─── Google Fonts ─────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -14,6 +17,8 @@
     --bubble-sent-text: #501C25;
     --bubble-received: #FFFFFF;
     --bubble-received-text: #1E1D24;
+    --shadow-sent: 0 2px 8px rgba(201, 85, 101, 0.12), 0 1px 3px rgba(0,0,0,0.04);
+    --shadow-recv: 0 2px 8px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.03);
   }
 
   .dark {
@@ -27,57 +32,113 @@
     --bubble-sent-text: #FCE8EC;
     --bubble-received: #28262E;
     --bubble-received-text: #F5F5F4;
+    --shadow-sent: 0 2px 12px rgba(201, 85, 101, 0.20), 0 1px 4px rgba(0,0,0,0.15);
+    --shadow-recv: 0 2px 8px rgba(0,0,0,0.25), 0 1px 3px rgba(0,0,0,0.12);
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    font-family: 'Plus Jakarta Sans', Inter, sans-serif;
   }
 }
 
-/* Custom Scrollbars */
-::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+/* ─── Custom Scrollbars ────────────────────────────────────────── */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(201, 85, 101, 0.2);
+  background: rgba(201, 85, 101, 0.18);
   border-radius: 999px;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(201, 85, 101, 0.4);
-}
+::-webkit-scrollbar-thumb:hover { background: rgba(201, 85, 101, 0.35); }
 
-/* Botanical Watermark Background Pattern */
+/* ─── Botanical Watermark Background ──────────────────────────── */
 .bg-botanical-pattern {
   background-color: var(--bg-primary);
-  background-image: radial-gradient(rgba(201, 85, 101, 0.05) 1px, transparent 0);
-  background-size: 24px 24px;
+  background-image:
+    radial-gradient(ellipse at 20% 30%, rgba(201,85,101,0.04) 0%, transparent 55%),
+    radial-gradient(ellipse at 80% 70%, rgba(201,85,101,0.04) 0%, transparent 55%),
+    radial-gradient(rgba(201, 85, 101, 0.04) 1px, transparent 0);
+  background-size: auto, auto, 22px 22px;
 }
 
-/* Safe Area Insets for Mobile Cutouts */
-.pb-safe {
-  padding-bottom: env(safe-area-inset-bottom, 16px);
-}
-.pt-safe {
-  padding-top: env(safe-area-inset-top, 16px);
-}
+/* ─── Safe Area Insets ─────────────────────────────────────────── */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 12px); }
+.pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+.mb-safe { margin-bottom: env(safe-area-inset-bottom, 12px); }
 
-/* Touch active scale effect */
-.active-scale {
-  transition: transform 0.15s ease;
-}
-.active-scale:active {
-  transform: scale(0.96);
-}
+/* ─── Touch active scale ───────────────────────────────────────── */
+.active-scale { transition: transform 0.13s ease; }
+.active-scale:active { transform: scale(0.95); }
 
-/* Glassmorphism panel */
+/* ─── Glassmorphism panel ──────────────────────────────────────── */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.dark .glass-panel {
+  background: rgba(30, 29, 36, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
-.dark .glass-panel {
-  background: rgba(30, 29, 36, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+/* ─── Message Bubble Shadows ───────────────────────────────────── */
+.bubble-shadow-sent  { box-shadow: var(--shadow-sent); }
+.bubble-shadow-recv  { box-shadow: var(--shadow-recv); }
+
+/* ─── Message Appear Animation ─────────────────────────────────── */
+@keyframes msgSlideIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+.msg-enter {
+  animation: msgSlideIn 0.18s cubic-bezier(0.34, 1.2, 0.64, 1) both;
+}
+
+/* ─── Reaction Bounce ──────────────────────────────────────────── */
+@keyframes reactionBounce {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.4); }
+  70%  { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+.reaction-bounce { animation: reactionBounce 0.35s ease both; }
+
+/* ─── Typing Dots ──────────────────────────────────────────────── */
+@keyframes typingDot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30%            { transform: translateY(-4px); opacity: 1; }
+}
+.typing-dot { animation: typingDot 1.2s infinite ease-in-out; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* ─── Shimmer Skeleton ─────────────────────────────────────────── */
+@keyframes shimmer {
+  from { background-position: -200% center; }
+  to   { background-position:  200% center; }
+}
+.skeleton {
+  background: linear-gradient(90deg, rgba(201,85,101,0.05) 25%, rgba(201,85,101,0.12) 50%, rgba(201,85,101,0.05) 75%);
+  background-size: 200% auto;
+  animation: shimmer 1.5s linear infinite;
+  border-radius: 8px;
+}
+
+/* ─── Attachment Tray ──────────────────────────────────────────── */
+@keyframes traySlide {
+  from { opacity: 0; transform: translateY(8px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+.tray-enter { animation: traySlide 0.18s cubic-bezier(0.34, 1.2, 0.64, 1) both; }
+
+/* ─── Reduced Motion ───────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .msg-enter, .reaction-bounce, .typing-dot, .skeleton, .tray-enter {
+    animation: none !important;
+    transition: none !important;
+  }
 }

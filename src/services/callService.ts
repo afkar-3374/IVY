@@ -137,16 +137,41 @@ export class CallService {
       this.localStream = null;
     }
 
+    const videoConstraints: MediaTrackConstraints | false =
+      callType === 'video'
+        ? {
+            facingMode,
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
+            frameRate: { ideal: 30, max: 60 },
+            aspectRatio: { ideal: 16 / 9 },
+          }
+        : false;
+
     const constraints: MediaStreamConstraints = {
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
+        sampleRate: 48000,
       },
-      video: callType === 'video' ? { facingMode } : false,
+      video: videoConstraints,
     };
 
-    this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    try {
+      this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err: unknown) {
+      // Fallback: if ideal video constraints fail, try basic constraints
+      if (callType === 'video' && err instanceof Error && err.name !== 'NotAllowedError') {
+        logger.warn('High-quality video constraints failed, trying basic constraints:', err.message);
+        this.localStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          video: { facingMode },
+        });
+      } else {
+        throw err;
+      }
+    }
     return this.localStream;
   }
 
@@ -165,8 +190,21 @@ export class CallService {
     this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
 
     this.peerConnection.ontrack = (event) => {
-      event.streams[0].getTracks().forEach((track) => {
-        this.remoteStream?.addTrack(track);
+      // Add each track individually to the remote stream for stability
+      // (handles cases where streams[0] may not exist on some browsers)
+      const tracks = event.streams?.[0]?.getTracks() ?? [event.track];
+      tracks.forEach((track) => {
+        if (!this.remoteStream) return;
+        // Avoid duplicate tracks
+        const existingTrack = this.remoteStream.getTracks().find(
+          (t) => t.kind === track.kind
+        );
+        if (existingTrack && existingTrack.id !== track.id) {
+          this.remoteStream.removeTrack(existingTrack);
+        }
+        if (!this.remoteStream.getTracks().includes(track)) {
+          this.remoteStream.addTrack(track);
+        }
       });
       if (this.onRemoteStreamCallback && this.remoteStream) {
         this.onRemoteStreamCallback(this.remoteStream);
@@ -203,11 +241,11 @@ export class CallService {
     return this.peerConnection;
   }
 
-  async createOffer(): Promise<RTCSessionDescriptionInit> {
+  async createOffer(includeVideo = false): Promise<RTCSessionDescriptionInit> {
     if (!this.peerConnection) throw new Error('Peer connection not created');
     const offer = await this.peerConnection.createOffer({
       offerToReceiveAudio: true,
-      offerToReceiveVideo: false,
+      offerToReceiveVideo: includeVideo,
     });
     await this.peerConnection.setLocalDescription(offer);
     return offer;
@@ -276,6 +314,26 @@ export class CallService {
       }
     }
     return 'unknown';
+  }
+
+  async checkCameraPermission(): Promise<PermissionState | 'unknown'> {
+    if (typeof navigator !== 'undefined' && navigator.permissions && navigator.permissions.query) {
+      try {
+        const res = await navigator.permissions.query({ name: 'camera' as PermissionName });
+        return res.state;
+      } catch {
+        return 'unknown';
+      }
+    }
+    return 'unknown';
+  }
+
+  hasVideoTrack(): boolean {
+    return (this.localStream?.getVideoTracks().length ?? 0) > 0;
+  }
+
+  getRemoteVideoTrack(): MediaStreamTrack | null {
+    return this.remoteStream?.getVideoTracks()[0] ?? null;
   }
 
   getConnectionState(): RTCPeerConnectionState | null {

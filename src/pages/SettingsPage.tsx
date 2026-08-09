@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   User,
@@ -17,6 +17,8 @@ import { Avatar } from '../components/ui/Avatar';
 import { Badge } from '../components/ui/Badge';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useUIStore } from '../store/useUIStore';
+import { Switch } from '../components/ui/Switch';
+import { notificationService } from '../services/notificationService';
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -24,7 +26,20 @@ const SettingsPage: React.FC = () => {
   const logout = useAuthStore((state) => state.logout);
   const partnerUser = useAuthStore((state) => state.getPartnerProfile());
   const theme = useSettingsStore((state) => state.theme);
+  const notificationsEnabled = useSettingsStore((state) => state.notificationsEnabled);
+  const notifyMessages = useSettingsStore((state) => state.notifyMessages);
+  const notifyCalls = useSettingsStore((state) => state.notifyCalls);
+  const notifySound = useSettingsStore((state) => state.notifySound);
+  const notifyVibration = useSettingsStore((state) => state.notifyVibration);
+  const dndEnabled = useSettingsStore((state) => state.dndEnabled);
+  const setNotificationsEnabled = useSettingsStore((state) => state.setNotificationsEnabled);
+  const setNotifyMessages = useSettingsStore((state) => state.setNotifyMessages);
+  const setNotifyCalls = useSettingsStore((state) => state.setNotifyCalls);
+  const setNotifySound = useSettingsStore((state) => state.setNotifySound);
+  const setNotifyVibration = useSettingsStore((state) => state.setNotifyVibration);
+  const setDndEnabled = useSettingsStore((state) => state.setDndEnabled);
   const addToast = useUIStore((state) => state.addToast);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const partnerDisplayName = currentUser?.nickname || partnerUser.display_name;
 
@@ -131,15 +146,29 @@ const SettingsPage: React.FC = () => {
           </button>
 
           <button
-            onClick={() => addToast('Notification preferences saved', 'info')}
+            onClick={() => setNotificationsOpen((open) => !open)}
             className="w-full flex items-center justify-between p-3.5 hover:bg-stone-50 dark:hover:bg-stone-800/40 rounded-2xl transition-colors"
           >
             <div className="flex items-center gap-3">
               <Bell className="w-4 h-4 text-stone-500" />
               <span className="text-xs font-bold text-stone-800 dark:text-stone-200">Notifications</span>
             </div>
-            <ChevronRight className="w-4 h-4 text-stone-400" />
+            <ChevronRight className={`w-4 h-4 text-stone-400 transition-transform ${notificationsOpen ? 'rotate-90' : ''}`} />
           </button>
+
+          {notificationsOpen && (
+            <div className="px-3.5 pb-3 pt-1 space-y-3 bg-stone-50/70 dark:bg-stone-900/20 rounded-2xl">
+              <div className="flex items-center justify-between gap-3">
+                <div><p className="text-xs font-bold">Enable notifications</p><p className="text-[10px] text-stone-500">Alerts when Ivy is not active</p></div>
+                <Switch checked={notificationsEnabled} onChange={async (enabled) => { setNotificationsEnabled(enabled); if (enabled) await notificationService.requestPermission(); }} />
+              </div>
+              <div className="flex items-center justify-between"><span className="text-xs font-semibold">Messages</span><Switch checked={notifyMessages} onChange={setNotifyMessages} disabled={!notificationsEnabled} /></div>
+              <div className="flex items-center justify-between"><span className="text-xs font-semibold">Calls</span><Switch checked={notifyCalls} onChange={setNotifyCalls} disabled={!notificationsEnabled} /></div>
+              <div className="flex items-center justify-between"><span className="text-xs font-semibold">Sound</span><Switch checked={notifySound} onChange={setNotifySound} disabled={!notificationsEnabled} /></div>
+              <div className="flex items-center justify-between"><span className="text-xs font-semibold">Vibration</span><Switch checked={notifyVibration} onChange={setNotifyVibration} disabled={!notificationsEnabled} /></div>
+              <div className="flex items-center justify-between"><div><p className="text-xs font-semibold">Do Not Disturb</p><p className="text-[10px] text-stone-500">Keep notifications silent</p></div><Switch checked={dndEnabled} onChange={setDndEnabled} /></div>
+            </div>
+          )}
 
           <button
             onClick={() => addToast('Privacy settings locked to private couple room', 'info')}

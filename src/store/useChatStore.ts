@@ -2,6 +2,9 @@ import { create } from 'zustand';
 import type { Message, MessageReaction, MessageType } from '../types';
 import { chatService } from '../services/chatService';
 import { generateLocalUuid } from '../utils/message';
+import { notificationService } from '../services/notificationService';
+import { USER_1_ID, DEFAULT_USER_1_PROFILE, DEFAULT_USER_2_PROFILE } from '../utils/constants';
+import { useAuthStore } from './useAuthStore';
 
 interface ChatState {
   messages: Message[];
@@ -60,7 +63,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     if (!get().isRealtimeSubscribed) {
       set({ isRealtimeSubscribed: true });
-      chatService.subscribeToRealtimeMessages((incomingMsg) => {
+      chatService.subscribeToRealtimeMessages((incomingMsg) =>
+      {
         set((state) => {
           const exists = state.messages.some(
             (m) => m.local_uuid === incomingMsg.local_uuid || m.id === incomingMsg.id
@@ -74,7 +78,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ),
             };
           }
-          return { messages: [...state.messages, incomingMsg] };
+
+          // Fire notification for incoming partner messages
+          const currentUserId = useAuthStore.getState().user?.id;
+          const isIncoming = Boolean(currentUserId) &&
+            incomingMsg.sender_id !== currentUserId &&
+            incomingMsg.message_type !== 'system';
+          if (isIncoming) {
+            // Determine partner name from constants
+            const senderProfile =
+              incomingMsg.sender_id === USER_1_ID
+                ? DEFAULT_USER_1_PROFILE
+                : DEFAULT_USER_2_PROFILE;
+            notificationService.notifyNewMessage(
+              incomingMsg.local_uuid || incomingMsg.id || String(Date.now()),
+              senderProfile.nickname || senderProfile.display_name,
+              typeof incomingMsg.content === 'string'
+                ? incomingMsg.content.slice(0, 80)
+                : '',
+              incomingMsg.message_type
+            );
+          }
+
+          const nextMessages = [...state.messages, incomingMsg];
+          if (isIncoming) {
+            const unreadCount = nextMessages.filter((message) =>
+              message.sender_id === incomingMsg.sender_id && message.status !== 'Read'
+            ).length;
+            void notificationService.setBadge(unreadCount);
+          }
+          return { messages: nextMessages };
         });
       });
     }
@@ -241,6 +274,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         m.sender_id === partnerId && m.status !== 'Read' ? { ...m, status: 'Read' } : m
       ),
     }));
+    await notificationService.clearBadge();
   },
 
   setActiveReplyTarget: (msg) => set({ activeReplyTarget: msg }),

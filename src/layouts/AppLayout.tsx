@@ -8,6 +8,8 @@ import { InstallPromptBanner } from '../components/Pwa/InstallPromptBanner';
 import { BottomTabBar } from '../components/Navigation/BottomTabBar';
 import { CallOverlay } from '../components/Call/CallOverlay';
 import { queueProcessor } from '../services/sync/queueProcessor';
+import { notificationService } from '../services/notificationService';
+import { useSettingsStore } from '../store/useSettingsStore';
 import { WifiOff } from 'lucide-react';
 
 interface AppLayoutProps {
@@ -19,6 +21,12 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   useTheme();
   const { activePreset } = useWallpaper();
   const isOnline = useOnlineStatus();
+  const notificationsEnabled = useSettingsStore((state) => state.notificationsEnabled);
+  const notifyMessages = useSettingsStore((state) => state.notifyMessages);
+  const notifyCalls = useSettingsStore((state) => state.notifyCalls);
+  const notifySound = useSettingsStore((state) => state.notifySound);
+  const notifyVibration = useSettingsStore((state) => state.notifyVibration);
+  const dndEnabled = useSettingsStore((state) => state.dndEnabled);
 
   // Show BottomTabBar on search, settings, info, profile views, but NOT on chat conversation or login
   const showBottomTabBar = location.pathname !== '/login' && location.pathname !== '/chat';
@@ -28,6 +36,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     queueProcessor.startPeriodicSync();
     return () => queueProcessor.stopPeriodicSync();
   }, []);
+
+  useEffect(() => {
+    notificationService.updatePreferences({ enabled: notificationsEnabled, messages: notifyMessages, calls: notifyCalls, sound: notifySound, vibration: notifyVibration, dnd: dndEnabled });
+  }, [notificationsEnabled, notifyMessages, notifyCalls, notifySound, notifyVibration, dndEnabled]);
+
 
   return (
     <div className="min-h-screen w-full flex justify-center bg-[#FDF8F6] dark:bg-[#16151A] text-stone-900 dark:text-stone-100 font-sans antialiased overflow-x-hidden">
@@ -62,4 +75,3 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     </div>
   );
 };
-

@@ -4,6 +4,8 @@ import { callService, type SignalingEvent } from '../services/callService';
 import { chatService } from '../services/chatService';
 import { logger } from '../services/logger/logger';
 import { ivyDb } from '../db/ivyDb';
+import { notificationService } from '../services/notificationService';
+import { USER_1_ID, DEFAULT_USER_1_PROFILE, DEFAULT_USER_2_PROFILE } from '../utils/constants';
 
 const CALL_TIMEOUT_SECONDS = 45; // Unanswered call timeout
 const RECONNECT_TIMEOUT_SECONDS = 15; // Connection loss timeout
@@ -120,8 +122,12 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       stream = await callService.getLocalMedia(callType);
     } catch (err: any) {
       const msg = err?.name === 'NotAllowedError'
-        ? 'Microphone permission denied. Please allow microphone access in your browser settings and try again.'
-        : 'Could not access microphone. Please check your device settings.';
+        ? callType === 'video'
+          ? 'Camera or microphone permission denied. Please allow access in your browser settings and try again.'
+          : 'Microphone permission denied. Please allow microphone access in your browser settings and try again.'
+        : callType === 'video'
+          ? 'Could not access camera or microphone. Please check your device settings.'
+          : 'Could not access microphone. Please check your device settings.';
       set(() => ({ permissionError: msg }));
       return;
     }
@@ -188,7 +194,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       }
     );
 
-    const offer = await callService.createOffer();
+    const offer = await callService.createOffer(callType === 'video');
     await callService.sendSignal(receiverId, {
       type: 'offer',
       callType,
@@ -206,7 +212,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
         chatService.sendMessage({
           sender_id: callerId,
           receiver_id: receiverId,
-          content: 'Missed voice call',
+          content: current.call_type === 'video' ? 'Missed video call' : 'Missed voice call',
           message_type: 'system',
         });
         addCallHistory(get, set as any, 'missed');
@@ -235,15 +241,11 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
     set(() => ({ currentCall: newSession, callSeconds: 0, permissionError: null }));
     playRingtone();
 
-    // Trigger system notification if app is hidden
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted' && document.hidden) {
-      try {
-        new Notification('Incoming Voice Call', {
-          body: 'Your partner is calling you on Ivy',
-          icon: '/pwa-192x192.png',
-        });
-      } catch {}
-    }
+    // Trigger notification for incoming call
+    const callerProfile =
+      callerId === USER_1_ID ? DEFAULT_USER_1_PROFILE : DEFAULT_USER_2_PROFILE;
+    const callerName = callerProfile.nickname || callerProfile.display_name;
+    notificationService.notifyIncomingCall(callType, callerName);
 
     // Stash offer for acceptCall
     (window as any).__pendingCallOffer = offer;
@@ -257,7 +259,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
         chatService.sendMessage({
           sender_id: callerId,
           receiver_id: receiverId,
-          content: 'Missed voice call',
+          content: current.call_type === 'video' ? 'Missed video call' : 'Missed voice call',
           message_type: 'system',
         });
         addCallHistory(get, set as any, 'missed');
@@ -278,8 +280,12 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       stream = await callService.getLocalMedia(current.call_type);
     } catch (err: any) {
       const msg = err?.name === 'NotAllowedError'
-        ? 'Microphone permission denied. Please allow microphone access and try again.'
-        : 'Could not access microphone. Please check your device settings.';
+        ? current.call_type === 'video'
+          ? 'Camera or microphone permission denied. Please allow access and try again.'
+          : 'Microphone permission denied. Please allow microphone access and try again.'
+        : current.call_type === 'video'
+          ? 'Could not access camera or microphone. Please check your device settings.'
+          : 'Could not access microphone. Please check your device settings.';
       set(() => ({ permissionError: msg }));
       return;
     }
@@ -297,7 +303,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
               chatService.sendMessage({
                 sender_id: curr.caller_id,
                 receiver_id: curr.receiver_id,
-                content: 'Voice call ended (Connection lost)',
+                content: curr.call_type === 'video' ? 'Video call ended (Connection lost)' : 'Voice call ended (Connection lost)',
                 message_type: 'system',
               });
               addCallHistory(get, set as any, 'completed');
@@ -353,7 +359,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       chatService.sendMessage({
         sender_id: current.participant_id,
         receiver_id: current.caller_id,
-        content: 'Declined voice call',
+        content: current.call_type === 'video' ? 'Declined video call' : 'Declined voice call',
         message_type: 'system',
       });
       addCallHistory(get, set as any, 'rejected');
@@ -373,13 +379,14 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       callService.sendSignal(partnerId, { type: 'end-call', senderId: current.participant_id });
 
       if (current.state === 'connected') {
+        const callTypeLabel = current.call_type === 'video' ? 'Video' : 'Voice';
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
         const durationStr = seconds > 0 ? `${mins}m ${secs}s` : '< 1s';
         chatService.sendMessage({
           sender_id: current.participant_id,
           receiver_id: partnerId,
-          content: `Voice call ended (${durationStr})`,
+          content: `${callTypeLabel} call ended (${durationStr})`,
           message_type: 'system',
         });
         addCallHistory(get, set as any, 'completed');
@@ -458,7 +465,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
           chatService.sendMessage({
             sender_id: current.caller_id,
             receiver_id: current.receiver_id,
-            content: 'Declined voice call',
+            content: current.call_type === 'video' ? 'Declined video call' : 'Declined voice call',
             message_type: 'system',
           });
         }
