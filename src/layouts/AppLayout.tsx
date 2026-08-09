@@ -44,7 +44,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   return (
     <div className="min-h-screen w-full flex justify-center bg-[#FDF8F6] dark:bg-[#16151A] text-stone-900 dark:text-stone-100 font-sans antialiased overflow-x-hidden">
       {/* Desktop & Mobile Responsive Frame Container */}
-      <div className={`w-full max-w-md min-h-screen flex flex-col relative shadow-2xl transition-all duration-300 ${activePreset.bgClass}`}>
+      <div className={`w-full max-w-md h-[100dvh] min-h-screen flex flex-col relative shadow-2xl transition-all duration-300 ${activePreset.bgClass}`}>
         
         {/* Offline notification banner if network drops */}
         {!isOnline && (
@@ -64,7 +64,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         <ToastContainer />
 
         {/* Main Content Area */}
-        <main className="flex-1 flex flex-col w-full relative">
+        <main className="flex-1 min-h-0 flex flex-col w-full relative">
           {children}
         </main>
 

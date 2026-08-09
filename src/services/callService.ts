@@ -131,12 +131,6 @@ export class CallService {
   }
 
   async getLocalMedia(callType: CallType, facingMode: 'user' | 'environment' = 'user'): Promise<MediaStream> {
-    // Stop any existing tracks first
-    if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => track.stop());
-      this.localStream = null;
-    }
-
     const videoConstraints: MediaTrackConstraints | false =
       callType === 'video'
         ? {
@@ -296,12 +290,19 @@ export class CallService {
     if (!this.peerConnection) return;
 
     const tracksByKind = new Map(stream.getTracks().map((track) => [track.kind, track]));
+    const previousTracks = this.peerConnection.getSenders()
+      .map((sender) => sender.track)
+      .filter((track): track is MediaStreamTrack => track !== null);
     await Promise.all(
       this.peerConnection.getSenders().map(async (sender) => {
         const replacement = sender.track ? tracksByKind.get(sender.track.kind) : undefined;
         if (replacement) await sender.replaceTrack(replacement);
       })
     );
+    previousTracks.forEach((track) => {
+      if (!tracksByKind.has(track.kind)) return;
+      track.stop();
+    });
   }
 
   async restartIce(): Promise<RTCSessionDescriptionInit | null> {

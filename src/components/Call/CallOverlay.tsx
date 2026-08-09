@@ -191,6 +191,7 @@ export const CallOverlay: React.FC = () => {
     if (!isVideoCall) return;
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
+      void remoteVideoRef.current.play().catch(() => {});
       // Detect when remote video track becomes active
       const videoTrack = remoteStream.getVideoTracks()[0];
       if (videoTrack) {
@@ -207,13 +208,14 @@ export const CallOverlay: React.FC = () => {
     if (!isVideoCall) return;
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream;
+      void localVideoRef.current.play().catch(() => {});
     }
   }, [localStream, isVideoCall]);
 
   /* ── Reset remoteHasVideo when call ends or new call starts ── */
   useEffect(() => {
-    if (!currentCall) setRemoteHasVideo(false);
-  }, [currentCall]);
+    if (!currentCall || !isVideoCall) setRemoteHasVideo(false);
+  }, [currentCall?.id, isVideoCall]);
 
   /* ── Auto-hide controls during connected video call ── */
   const resetControlsTimer = useCallback(() => {
@@ -753,7 +755,7 @@ export const CallOverlay: React.FC = () => {
 
       {/* Main Call Screen */}
       <AnimatePresence>
-        {currentCall && (isVideoCall ? <VideoCallScreen key="video" /> : <VoiceCallScreen key="voice" />)}
+        {currentCall && (isVideoCall ? VideoCallScreen() : VoiceCallScreen())}
       </AnimatePresence>
     </>
   );
