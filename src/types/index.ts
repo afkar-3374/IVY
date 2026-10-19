@@ -4,7 +4,7 @@ export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'voice' | 'docu
 
 export interface UserProfile {
   id: string;
-  login_id_hash: string;
+  role?: 'afkar' | 'princess';
   display_name: string;
   nickname: string; // Personal nickname assigned to partner
   about: string;
@@ -48,6 +48,8 @@ export interface Message {
   sender_id: string;
   receiver_id: string;
   content: string;
+  /** Server ciphertext this content was decrypted from (local cache only) */
+  cipher?: string;
   message_type: MessageType;
   reply_to?: string;
   reply_to_msg?: ReplyReference;

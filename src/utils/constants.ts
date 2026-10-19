@@ -3,9 +3,11 @@ import type { UserProfile } from '../types';
 export const USER_1_ID = '11111111-1111-4111-a111-111111111111';
 export const USER_2_ID = '22222222-2222-4222-a222-222222222222';
 
+// Sign-in accounts; each partner's PIN is their account password.
+export const ACCOUNT_EMAILS = ['afkar@ivy.example.com', 'princess@ivy.example.com'];
+
 export const DEFAULT_USER_1_PROFILE: UserProfile = {
   id: USER_1_ID,
-  login_id_hash: '0bffe87dfa4bd113259d65cb7182428a8bba979dd60e89b641bcb835a2e1acfa', // SHA-256 of 220609
   display_name: 'Afkar',
   nickname: 'My Princess ❤️',
   about: 'Just a boy in love. ❤️',
@@ -18,7 +20,6 @@ export const DEFAULT_USER_1_PROFILE: UserProfile = {
 
 export const DEFAULT_USER_2_PROFILE: UserProfile = {
   id: USER_2_ID,
-  login_id_hash: '1c5f1257f1b520659769643539651ea62813ca7ca87e567111588e6cd9d6a94c', // SHA-256 of 030309
   display_name: 'Princess',
   nickname: 'My Hero ❤️',
   about: 'You are my today and all of my tomorrows.',

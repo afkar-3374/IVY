@@ -4,6 +4,7 @@ import { conflictResolver } from './conflictResolver';
 import { ivyDb } from '../../db/ivyDb';
 import { logger } from '../logger/logger';
 import { supabase } from '../supabaseClient';
+import { seal, hasCoupleKey } from '../crypto/coupleCrypto';
 import type { Message, MessageReaction } from '../../types';
 
 class QueueProcessor {
@@ -33,7 +34,8 @@ class QueueProcessor {
   }
 
   public async processQueue(): Promise<void> {
-    if (this.isProcessing || !networkMonitor.isOnline()) return;
+    // Messages can only be encrypted (and so sent) while the chat is unlocked
+    if (this.isProcessing || !networkMonitor.isOnline() || !hasCoupleKey()) return;
 
     this.isProcessing = true;
     logger.sync('Starting queue processing turn...');
@@ -58,7 +60,7 @@ class QueueProcessor {
                   local_uuid: msgPayload.local_uuid,
                   sender_id: msgPayload.sender_id,
                   receiver_id: msgPayload.receiver_id,
-                  content: msgPayload.content,
+                  content: await seal(msgPayload.content),
                   message_type: msgPayload.message_type || 'text',
                   reply_to: msgPayload.reply_to || null,
                   status: 'sent'
@@ -83,7 +85,7 @@ class QueueProcessor {
             if (supabase) {
               const { error } = await supabase
                 .from('messages')
-                .update({ content, edited: true, edited_at: now })
+                .update({ content: await seal(content), edited: true, edited_at: now })
                 .eq('local_uuid', local_uuid);
               if (error) throw error;
             }

@@ -115,6 +115,7 @@ const NetworkDot: React.FC<{ state: RTCPeerConnectionState | null; isReconnectin
 /* ──────────────────────────────────────────────────────────────── */
 export const CallOverlay: React.FC = () => {
   const currentUser = useAuthStore((s) => s.user);
+  const isUnlocked = useAuthStore((s) => s.isUnlocked);
   const partnerUser = useAuthStore((s) => s.getPartnerProfile());
 
   const {
@@ -160,10 +161,11 @@ export const CallOverlay: React.FC = () => {
 
   /* ── Wire signaling once ── */
   useEffect(() => {
-    if (currentUser) {
+    // Calls only ring while the chat is unlocked, so nothing shows over the PIN screen
+    if (currentUser && isUnlocked) {
       return listenToSignaling(currentUser.id);
     }
-  }, [currentUser?.id]);
+  }, [currentUser?.id, isUnlocked]);
 
   /* ── Recovery on resume / online ── */
   useEffect(() => {
@@ -211,6 +213,18 @@ export const CallOverlay: React.FC = () => {
       void localVideoRef.current.play().catch(() => {});
     }
   }, [localStream, isVideoCall]);
+
+  // The preview only mounts once connected (and after un-minimizing), so attach on mount too
+  const bindLocalPreview = useCallback(
+    (el: HTMLVideoElement | null) => {
+      localVideoRef.current = el;
+      if (el && localStream && el.srcObject !== localStream) {
+        el.srcObject = localStream;
+        void el.play().catch(() => {});
+      }
+    },
+    [localStream]
+  );
 
   /* ── Reset remoteHasVideo when call ends or new call starts ── */
   useEffect(() => {
@@ -514,7 +528,7 @@ export const CallOverlay: React.FC = () => {
               </div>
             ) : (
               <video
-                ref={localVideoRef}
+                ref={bindLocalPreview}
                 autoPlay
                 playsInline
                 muted

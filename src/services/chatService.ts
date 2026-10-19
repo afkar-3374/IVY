@@ -1,7 +1,8 @@
 import { supabase } from './supabaseClient';
 import { logger } from './logger/logger';
 import { generateLocalUuid } from '../utils/message';
-import { DEFAULT_USER_1_PROFILE, DEFAULT_USER_2_PROFILE, USER_1_ID } from '../utils/constants';
+import { USER_1_ID } from '../utils/constants';
+import { seal, open, DECRYPT_FAILED } from './crypto/coupleCrypto';
 import type { Message, UserProfile, MessageReaction, MessageType } from '../types';
 import { ivyDb } from '../db/ivyDb';
 import { syncQueue } from './sync/syncQueue';
@@ -48,76 +49,122 @@ function resolveReplyReferences(msgs: Message[]): Message[] {
   });
 }
 
+
+/** Decrypt the private fields of a profile row. */
+async function openProfile(row: UserProfile): Promise<UserProfile> {
+  return {
+    ...row,
+    nickname: await open(row.nickname || ''),
+    about: await open(row.about || ''),
+    avatar_url: await open(row.avatar_url || ''),
+  };
+}
+
+/**
+ * Convert a server row into a local message, decrypting its content.
+ * Decryption is skipped when the ciphertext matches what is already cached locally.
+ */
+async function toLocalMessage(item: any, existingLocal?: Message): Promise<Message> {
+  const localUuid = item.local_uuid || item.id;
+  const content =
+    existingLocal && existingLocal.cipher === item.content ? existingLocal.content : await open(item.content);
+  const isAudioData = content.startsWith('data:audio/');
+  const resolvedType: MessageType = isAudioData ? 'voice' : (item.message_type || 'text');
+
+  let status: Message['status'] = 'Sent';
+  if (item.status === 'read' || item.status === 'Read') status = 'Read';
+  else if (item.status === 'delivered' || item.status === 'Delivered') status = 'Delivered';
+
+  return {
+    id: item.id,
+    local_uuid: localUuid,
+    sender_id: item.sender_id,
+    receiver_id: item.receiver_id || '',
+    content,
+    // Remember the ciphertext only once decrypted, so failures are retried later
+    cipher: content === DECRYPT_FAILED ? undefined : item.content,
+    message_type: resolvedType,
+    reply_to: item.reply_to,
+    edited: item.edited || false,
+    edited_at: item.edited_at,
+    deleted: item.deleted || false,
+    deleted_at: item.deleted_at,
+    pinned: item.pinned || false,
+    starred: item.starred || false,
+    forwarded: item.forwarded || false,
+    status,
+    created_at: item.created_at || new Date().toISOString(),
+    updated_at: item.updated_at || item.created_at || new Date().toISOString(),
+    reactions: [],
+  };
+}
+
 export class ChatService {
   private realtimeUnsubscribe: (() => void) | null = null;
   /**
-   * Seed default predefined users directly into IndexedDB and Supabase profiles table.
+   * Fetch both partner profiles from Supabase (decrypted), falling back to the local cache.
    */
-  async initPreseededProfiles(): Promise<void> {
-    try {
-      await ivyDb.profiles.bulkPut([DEFAULT_USER_1_PROFILE, DEFAULT_USER_2_PROFILE]);
-      if (supabase && networkMonitor.isOnline()) {
-        await supabase.from('profiles').upsert([DEFAULT_USER_1_PROFILE, DEFAULT_USER_2_PROFILE], { onConflict: 'id' });
-      }
-    } catch (err) {
-      logger.error('Error seeding profiles:', err);
-    }
-  }
-
-  /**
-   * Fetch profile by login ID hash. Checks IndexedDB first, then Supabase.
-   */
-  async getProfileByHash(hash: string): Promise<UserProfile | null> {
-    await this.initPreseededProfiles();
-
-    try {
-      const localProfile = await ivyDb.profiles.where('login_id_hash').equals(hash).first();
-      if (localProfile) return localProfile;
-    } catch (err) {
-      logger.error('Local DB profile fetch error:', err);
-    }
-
+  async getProfiles(): Promise<UserProfile[]> {
     if (supabase && networkMonitor.isOnline()) {
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('login_id_hash', hash)
-          .single();
-
+        const { data, error } = await supabase.from('profiles').select('*');
         if (!error && data) {
-          const profile = data as UserProfile;
-          await ivyDb.profiles.put(profile);
-          return profile;
+          const profiles = await Promise.all(data.map((row) => openProfile(row as UserProfile)));
+          await ivyDb.profiles.bulkPut(profiles);
+          return profiles;
         }
+        if (error) logger.error('Supabase profiles query error:', error.message);
       } catch (err) {
-        logger.error('Supabase profile query error:', err);
+        logger.error('Supabase profiles query error:', err);
       }
     }
-
-    return null;
+    return ivyDb.profiles.toArray();
   }
 
   /**
-   * Update User Profile directly in IndexedDB and Supabase.
+   * Save own profile: private fields are encrypted before leaving the device.
    */
   async updateProfile(profile: UserProfile): Promise<void> {
     profile.updated_at = new Date().toISOString();
     try {
       await ivyDb.profiles.put(profile);
       if (supabase && networkMonitor.isOnline()) {
-        await supabase.from('profiles').upsert(profile);
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            display_name: profile.display_name,
+            nickname: await seal(profile.nickname || ''),
+            about: await seal(profile.about || ''),
+            avatar_url: await seal(profile.avatar_url || ''),
+            wallpaper: profile.wallpaper,
+            theme: profile.theme,
+            updated_at: profile.updated_at,
+          })
+          .eq('id', profile.id);
+        if (error) logger.error('Error updating profile:', error.message);
       }
     } catch (err) {
       logger.error('Error updating profile:', err);
     }
   }
 
+  subscribeToProfileChanges(onChange: () => void): () => void {
+    if (!supabase) return () => {};
+    const client = supabase;
+    const channel = client
+      .channel('ivy_profiles')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, () => onChange())
+      .subscribe();
+    return () => {
+      client.removeChannel(channel);
+    };
+  }
+
   /**
    * Fetch all messages. Loads from IndexedDB first, then fetches from Supabase if online,
    * merges/upserts into IndexedDB, and returns sorted messages with resolved reply references.
    */
-  async getMessages(): Promise<Message[]> {
+  async getMessages(fetchRemote = true): Promise<Message[]> {
     try {
       // 1. Get cached local messages first
       const localMsgs = await ivyDb.messages.orderBy('created_at').toArray();
@@ -137,7 +184,7 @@ export class ChatService {
       };
 
       // 2. Fetch fresh data from Supabase if online
-      if (supabase && networkMonitor.isOnline()) {
+      if (fetchRemote && supabase && networkMonitor.isOnline()) {
         try {
           const [{ data: remoteMsgs }, { data: remoteReactions }] = await Promise.all([
             supabase.from('messages').select('*').order('created_at', { ascending: true }),
@@ -146,45 +193,14 @@ export class ChatService {
 
           if (remoteMsgs && remoteMsgs.length > 0) {
             for (const item of remoteMsgs) {
-              const isAudioData = typeof item.content === 'string' && item.content.startsWith('data:audio/');
-              const resolvedType: MessageType = isAudioData ? 'voice' : (item.message_type || 'text');
-              const localUuid = item.local_uuid || item.id;
-
-              const existingLocal = await ivyDb.messages.get(localUuid);
-              // Preserve local queued/sending status if unsynced
-              let status: Message['status'] = 'Sent';
-              if (item.status === 'read' || item.status === 'Read') status = 'Read';
-              else if (item.status === 'delivered' || item.status === 'Delivered') status = 'Delivered';
-
-              if (existingLocal && (existingLocal.status === 'Sending' || existingLocal.status === 'Queued')) {
-                status = existingLocal.status;
-              }
-
-              const msg: Message = {
-                id: item.id,
-                local_uuid: localUuid,
-                sender_id: item.sender_id,
-                receiver_id: item.receiver_id || '',
-                content: item.content,
-                message_type: resolvedType,
-                reply_to: item.reply_to,
-                edited: item.edited || false,
-                edited_at: item.edited_at,
-                deleted: item.deleted || false,
-                deleted_at: item.deleted_at,
-                pinned: item.pinned || false,
-                starred: item.starred || false,
-                forwarded: item.forwarded || false,
-                status,
-                created_at: item.created_at,
-                updated_at: item.updated_at || item.created_at,
-                reactions: []
-              };
+              const existingLocal = await ivyDb.messages.get(item.local_uuid || item.id);
+              const msg = await toLocalMessage(item, existingLocal);
               await ivyDb.messages.put(msg);
             }
           }
 
-          if (remoteReactions && remoteReactions.length > 0) {
+          if (remoteReactions) {
+            await ivyDb.reactions.clear();
             for (const r of remoteReactions) {
               const reaction: MessageReaction = {
                 id: r.id || generateLocalUuid(),
@@ -408,7 +424,10 @@ export class ChatService {
   /**
    * Subscribe directly to Supabase Realtime channel for messages & reactions.
    */
-  subscribeToRealtimeMessages(onMessageReceived: (msg: Message) => void): () => void {
+  subscribeToRealtimeMessages(
+    onMessageReceived: (msg: Message) => void,
+    onReactionsChanged: (msgs: Message[]) => void
+  ): () => void {
     this.realtimeUnsubscribe?.();
     if (!supabase) return () => {};
 
@@ -427,42 +446,12 @@ export class ChatService {
           }
           const item = payload.new as any;
           if (item && item.content) {
-            const isAudioData = typeof item.content === 'string' && item.content.startsWith('data:audio/');
-            const resolvedType: MessageType = isAudioData ? 'voice' : (item.message_type || 'text');
             const localUuid = item.local_uuid || item.id;
-
             const existingLocal = await ivyDb.messages.get(localUuid);
-            let status: Message['status'] = 'Sent';
-            if (item.status === 'read' || item.status === 'Read') status = 'Read';
-            else if (item.status === 'delivered' || item.status === 'Delivered') status = 'Delivered';
-
-            if (existingLocal && (existingLocal.status === 'Sending' || existingLocal.status === 'Queued')) {
-              status = existingLocal.status;
-            }
-
-            const msg: Message = {
-              id: item.id,
-              local_uuid: localUuid,
-              sender_id: item.sender_id,
-              receiver_id: item.receiver_id || '',
-              content: item.content,
-              message_type: resolvedType,
-              reply_to: item.reply_to,
-              edited: item.edited || false,
-              edited_at: item.edited_at,
-              deleted: item.deleted || false,
-              deleted_at: item.deleted_at,
-              pinned: item.pinned || false,
-              starred: item.starred || false,
-              forwarded: item.forwarded || false,
-              status,
-              created_at: item.created_at || new Date().toISOString(),
-              updated_at: item.updated_at || new Date().toISOString(),
-              reactions: []
-            };
+            const msg = await toLocalMessage(item, existingLocal);
 
             await ivyDb.messages.put(msg);
-            const msgs = await this.getMessages();
+            const msgs = await this.getMessages(false);
             const resolvedMsg = msgs.find((m) => m.local_uuid === localUuid || m.id === item.id) || msg;
             onMessageReceived(resolvedMsg);
           }
@@ -472,10 +461,7 @@ export class ChatService {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'message_reactions' },
         async () => {
-          const msgs = await this.getMessages();
-          if (msgs.length > 0) {
-            onMessageReceived(msgs[msgs.length - 1]);
-          }
+          onReactionsChanged(await this.getMessages());
         }
       )
       .subscribe();

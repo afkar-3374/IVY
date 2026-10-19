@@ -52,7 +52,7 @@ export class CallService {
     }
 
     const channel = supabase.channel(channelName, {
-      config: { broadcast: { self: false } },
+      config: { private: true, broadcast: { self: false } },
     });
     this.channel = channel;
     this.signalingUserId = userId;

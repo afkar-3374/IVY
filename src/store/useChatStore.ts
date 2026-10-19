@@ -88,7 +88,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             notificationService.notifyNewMessage(
               incomingMsg.local_uuid || incomingMsg.id || String(Date.now()),
               senderProfile.nickname || senderProfile.display_name,
-              typeof incomingMsg.content === 'string' ? incomingMsg.content.slice(0, 80) : '',
+              'Sent you a message ❤️', // never show message text on the lock screen
               incomingMsg.message_type
             );
           }
@@ -100,6 +100,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
             void notificationService.setBadge(unreadCount);
           }
           return { messages: nextMessages };
+        });
+      }, (allMessages) => {
+        set((state) => {
+          const byId = new Map(allMessages.map((m) => [m.local_uuid, m]));
+          return { messages: state.messages.map((m) => byId.get(m.local_uuid) || m) };
         });
       });
     }

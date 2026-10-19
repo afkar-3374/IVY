@@ -7,6 +7,7 @@ export function useTyping(timeoutMs = 2500) {
   const setTyping = usePresenceStore((state) => state.setTyping);
 
   const triggerTyping = useCallback(() => {
+    if (timerRef.current === null) setTyping(true);
     setIsSelfTyping(true);
 
     if (timerRef.current) {
@@ -14,6 +15,7 @@ export function useTyping(timeoutMs = 2500) {
     }
 
     timerRef.current = window.setTimeout(() => {
+      timerRef.current = null;
       setIsSelfTyping(false);
       setTyping(false);
     }, timeoutMs);

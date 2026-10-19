@@ -90,7 +90,7 @@ export const usePresenceStore = create<PresenceStoreState>((set, get) => ({
     activeUserId = userId;
 
     room = supabase.channel('ivy_presence_room', {
-      config: { presence: { key: userId } },
+      config: { private: true, presence: { key: userId } },
     });
 
     const activeRoom = room;

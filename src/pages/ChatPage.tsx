@@ -42,6 +42,9 @@ import type { Message } from '../types';
 import { useUIStore } from '../store/useUIStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 
+// Files are encrypted in memory on the phone, so keep them reasonably small
+const MAX_ENCRYPTED_FILE_BYTES = 25 * 1024 * 1024;
+
 const ChatPage: React.FC = () => {
   const navigate = useNavigate();
   const currentUser = useAuthStore((state) => state.user);
@@ -182,6 +185,10 @@ const ChatPage: React.FC = () => {
     addToast(`Processing & sending ${files.length} video(s)...`, 'info');
 
     for (const file of files) {
+      if (file.size > MAX_ENCRYPTED_FILE_BYTES) {
+        addToast(`${file.name} is too big (max 25 MB)`, 'error');
+        continue;
+      }
       try {
         const { dataUrl, fileUrl } = await storageService.processAndUploadVideo(file);
         await sendMessage(currentUser.id, partnerUser.id, fileUrl || dataUrl, 'video');
@@ -198,6 +205,10 @@ const ChatPage: React.FC = () => {
     addToast(`Preparing & sending ${files.length} file(s)...`, 'info');
 
     for (const file of files) {
+      if (file.size > MAX_ENCRYPTED_FILE_BYTES) {
+        addToast(`${file.name} is too big (max 25 MB)`, 'error');
+        continue;
+      }
       try {
         const { dataUrl, fileUrl } = await storageService.processAndUploadDocument(file);
         await sendMessage(currentUser.id, partnerUser.id, fileUrl || dataUrl, 'document');

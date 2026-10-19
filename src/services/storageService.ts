@@ -1,12 +1,9 @@
-import { supabase } from './supabaseClient';
 import { logger } from './logger/logger';
 import type { MessageType } from '../types';
 import { compressImage } from '../utils/imageCompressor';
 import { extractVideoMetadata } from '../utils/videoProcessor';
 
 export class StorageService {
-  private bucketName = 'ivy-media';
-
   /**
    * Determine MessageType from MIME type or file extension
    */
@@ -144,37 +141,10 @@ export class StorageService {
     const name = fileName || (file as File).name || `file_${Date.now()}`;
     const mimeType = file.type || 'application/octet-stream';
     const fileSize = file.size;
-    const path = `${folder}/${Date.now()}_${name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
 
+    // Files travel inside the message as data URLs; the sync layer encrypts them and moves
+    // large ones into the private bucket as ciphertext. Nothing is uploaded unencrypted.
     if (onProgress) onProgress(20);
-
-    if (supabase) {
-      try {
-        const { error } = await supabase.storage.from(this.bucketName).upload(path, file, {
-          cacheControl: '3600',
-          upsert: true,
-        });
-
-        if (onProgress) onProgress(70);
-
-        if (!error) {
-          const { data: urlData } = supabase.storage.from(this.bucketName).getPublicUrl(path);
-          if (onProgress) onProgress(100);
-          return {
-            fileUrl: urlData.publicUrl,
-            mimeType,
-            fileName: name,
-            fileSize,
-          };
-        } else {
-          logger.warn('Supabase storage upload returned error, using fallback DataURL:', error.message);
-        }
-      } catch (err) {
-        logger.error('Supabase storage upload exception:', err);
-      }
-    }
-
-    // Fallback: Convert to DataURL for offline / non-storage environments
     const dataUrl = await this.fileToDataUrl(file);
     if (onProgress) onProgress(100);
     return {

@@ -10,7 +10,11 @@ import { CallOverlay } from '../components/Call/CallOverlay';
 import { queueProcessor } from '../services/sync/queueProcessor';
 import { notificationService } from '../services/notificationService';
 import { useSettingsStore } from '../store/useSettingsStore';
+import { useAuthStore } from '../store/useAuthStore';
 import { WifiOff } from 'lucide-react';
+
+// Re-lock with the PIN after the app has been in the background this long
+const AUTO_LOCK_MS = 30_000;
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -35,6 +39,20 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     // Start periodic background queue sync
     queueProcessor.startPeriodicSync();
     return () => queueProcessor.stopPeriodicSync();
+  }, []);
+
+  useEffect(() => {
+    let hiddenAt: number | null = null;
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+      } else if (hiddenAt !== null && Date.now() - hiddenAt > AUTO_LOCK_MS) {
+        useAuthStore.getState().lock();
+        hiddenAt = null;
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
   useEffect(() => {
