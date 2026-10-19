@@ -4,9 +4,12 @@ import { callService, type SignalingEvent } from '../services/callService';
 import { chatService } from '../services/chatService';
 import { logger } from '../services/logger/logger';
 import { ivyDb } from '../db/ivyDb';
+import { useAuthStore } from './useAuthStore';
 
 const CALL_TIMEOUT_SECONDS = 45; // Unanswered call timeout
-const RECONNECT_TIMEOUT_SECONDS = 15; // Connection loss timeout
+const RINGING_FALLBACK_SECONDS = 50; // Receiver stops ringing if the caller's end signal is lost
+const RECONNECT_TIMEOUT_SECONDS = 20; // Connection loss timeout
+const ICE_RESTART_DELAY_MS = 2000; // Grace period before trying to repair a dropped connection
 
 interface CallStoreState {
   currentCall: CallSession | null;
@@ -58,7 +61,18 @@ const stopRingtone = () => {
   }
 };
 
+/** Post a call note into the chat as the signed-in partner. */
+const logCallMessage = (content: string) => {
+  const me = useAuthStore.getState().user;
+  if (!me) return;
+  const partner = useAuthStore.getState().getPartnerProfile();
+  void chatService.sendMessage({ sender_id: me.id, receiver_id: partner.id, content, message_type: 'system' });
+};
+
+let iceRestartTimer: NodeJS.Timeout | null = null;
+
 const clearAllTimers = () => {
+  if (iceRestartTimer) { clearTimeout(iceRestartTimer); iceRestartTimer = null; }
   if (callTimerInterval) { clearInterval(callTimerInterval); callTimerInterval = null; }
   if (callTimeoutTimer) { clearTimeout(callTimeoutTimer); callTimeoutTimer = null; }
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
@@ -96,6 +110,63 @@ const addCallHistory = async (
   } catch (e) {
     logger.warn('Failed to save call log to IndexedDB:', e);
   }
+};
+
+
+/**
+ * Watch the WebRTC connection: the caller repairs drops with an ICE restart, and
+ * either side hangs up if the connection stays down for RECONNECT_TIMEOUT_SECONDS.
+ */
+const watchConnection = (
+  get: () => CallStoreState,
+  set: (fn: (s: CallStoreState) => Partial<CallStoreState>) => void
+) => {
+  callService.setConnectionStateListener((state) => {
+    set(() => ({ connectionState: state }));
+    const current = get().currentCall;
+    if (!current) return;
+
+    if (state === 'disconnected' || state === 'failed') {
+      const isCaller = current.participant_id === current.caller_id;
+      if (isCaller && !iceRestartTimer) {
+        iceRestartTimer = setTimeout(async () => {
+          iceRestartTimer = null;
+          const now = get().currentCall;
+          const conn = callService.getConnectionState();
+          if (!now || (conn !== 'disconnected' && conn !== 'failed')) return;
+          logger.info('Connection dropped – restarting ICE');
+          const offer = await callService.restartIce();
+          if (offer) {
+            await callService.sendSignal(now.receiver_id, {
+              type: 'offer', callType: now.call_type, sdp: offer, callerId: now.caller_id, restart: true,
+            });
+          }
+        }, state === 'failed' ? 0 : ICE_RESTART_DELAY_MS);
+      }
+
+      if (!reconnectTimer) {
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          const curr = get().currentCall;
+          const conn = get().connectionState;
+          if (curr && (conn === 'disconnected' || conn === 'failed')) {
+            logger.warn('Reconnection timed out – terminating call');
+            stopRingtone();
+            clearAllTimers();
+            const partnerId = curr.participant_id === curr.caller_id ? curr.receiver_id : curr.caller_id;
+            void callService.sendSignal(partnerId, { type: 'end-call', senderId: curr.participant_id });
+            logCallMessage(curr.call_type === 'video' ? 'Video call ended (Connection lost)' : 'Voice call ended (Connection lost)');
+            addCallHistory(get, set, 'completed');
+            callService.endCall();
+            set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, connectionState: null }));
+          }
+        }, RECONNECT_TIMEOUT_SECONDS * 1000);
+      }
+    } else if (state === 'connected') {
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      if (iceRestartTimer) { clearTimeout(iceRestartTimer); iceRestartTimer = null; }
+    }
+  });
 };
 
 export const useCallStore = create<CallStoreState>((set, get) => ({
@@ -151,35 +222,8 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
 
     playRingtone();
 
-    callService.setConnectionStateListener((state) => {
-      set(() => ({ connectionState: state }));
-      if (state === 'disconnected' || state === 'failed') {
-        if (!reconnectTimer) {
-          reconnectTimer = setTimeout(() => {
-            const current = get().currentCall;
-            if (current && (get().connectionState === 'disconnected' || get().connectionState === 'failed')) {
-              logger.warn('Reconnection timed out – terminating call');
-              stopRingtone();
-              clearAllTimers();
-              chatService.sendMessage({
-                sender_id: current.caller_id,
-                receiver_id: current.receiver_id,
-                content: 'Voice call ended (Connection lost)',
-                message_type: 'system',
-              });
-              addCallHistory(get, set as any, 'completed');
-              callService.endCall();
-              set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, connectionState: null }));
-            }
-          }, RECONNECT_TIMEOUT_SECONDS * 1000);
-        }
-      } else if (state === 'connected') {
-        if (reconnectTimer) {
-          clearTimeout(reconnectTimer);
-          reconnectTimer = null;
-        }
-      }
-    });
+    watchConnection(get, set as any);
+    await callService.loadIceServers();
 
     callService.createPeerConnection(
       (remoteStr) => set(() => ({ remoteStream: remoteStr })),
@@ -207,12 +251,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
         logger.info('Call timed out – no answer');
         stopRingtone();
         callService.sendSignal(receiverId, { type: 'end-call', senderId: callerId });
-        chatService.sendMessage({
-          sender_id: callerId,
-          receiver_id: receiverId,
-          content: current.call_type === 'video' ? 'Missed video call' : 'Missed voice call',
-          message_type: 'system',
-        });
+        logCallMessage(current.call_type === 'video' ? 'Missed video call' : 'Missed voice call');
         addCallHistory(get, set as any, 'missed');
         callService.endCall();
         set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0 }));
@@ -236,6 +275,8 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       state: 'incoming',
     };
 
+    callService.resetPendingCandidates();
+    void callService.loadIceServers();
     set(() => ({ currentCall: newSession, callSeconds: 0, permissionError: null }));
     playRingtone();
 
@@ -252,23 +293,17 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
     // Stash offer for acceptCall
     (window as any).__pendingCallOffer = offer;
 
-    // Auto-timeout if not answered
+    // Fallback: stop ringing if the caller's "missed call" signal never arrives.
+    // The caller posts the missed-call note, so nothing is logged here.
     callTimeoutTimer = setTimeout(() => {
       const current = get().currentCall;
       if (current?.state === 'incoming') {
         stopRingtone();
-        callService.sendSignal(callerId, { type: 'reject-call', senderId: receiverId });
-        chatService.sendMessage({
-          sender_id: callerId,
-          receiver_id: receiverId,
-          content: current.call_type === 'video' ? 'Missed video call' : 'Missed voice call',
-          message_type: 'system',
-        });
         addCallHistory(get, set as any, 'missed');
         callService.endCall();
         set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0 }));
       }
-    }, CALL_TIMEOUT_SECONDS * 1000);
+    }, RINGING_FALLBACK_SECONDS * 1000);
   },
 
   acceptCall: async () => {
@@ -292,35 +327,8 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       return;
     }
 
-    callService.setConnectionStateListener((state) => {
-      set(() => ({ connectionState: state }));
-      if (state === 'disconnected' || state === 'failed') {
-        if (!reconnectTimer) {
-          reconnectTimer = setTimeout(() => {
-            const curr = get().currentCall;
-            if (curr && (get().connectionState === 'disconnected' || get().connectionState === 'failed')) {
-              logger.warn('Reconnection timed out – terminating call');
-              stopRingtone();
-              clearAllTimers();
-              chatService.sendMessage({
-                sender_id: curr.caller_id,
-                receiver_id: curr.receiver_id,
-                content: curr.call_type === 'video' ? 'Video call ended (Connection lost)' : 'Voice call ended (Connection lost)',
-                message_type: 'system',
-              });
-              addCallHistory(get, set as any, 'completed');
-              callService.endCall();
-              set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, connectionState: null }));
-            }
-          }, RECONNECT_TIMEOUT_SECONDS * 1000);
-        }
-      } else if (state === 'connected') {
-        if (reconnectTimer) {
-          clearTimeout(reconnectTimer);
-          reconnectTimer = null;
-        }
-      }
-    });
+    watchConnection(get, set as any);
+    await callService.loadIceServers();
 
     callService.createPeerConnection(
       (remoteStr) => set(() => ({ remoteStream: remoteStr })),
@@ -358,12 +366,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
     const current = get().currentCall;
     if (current) {
       callService.sendSignal(current.caller_id, { type: 'reject-call', senderId: current.receiver_id });
-      chatService.sendMessage({
-        sender_id: current.participant_id,
-        receiver_id: current.caller_id,
-        content: current.call_type === 'video' ? 'Declined video call' : 'Declined voice call',
-        message_type: 'system',
-      });
+      logCallMessage(current.call_type === 'video' ? 'Declined video call' : 'Declined voice call');
       addCallHistory(get, set as any, 'rejected');
     }
     callService.endCall();
@@ -385,12 +388,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
         const durationStr = seconds > 0 ? `${mins}m ${secs}s` : '< 1s';
-        chatService.sendMessage({
-          sender_id: current.participant_id,
-          receiver_id: partnerId,
-          content: `${callTypeLabel} call ended (${durationStr})`,
-          message_type: 'system',
-        });
+        logCallMessage(`${callTypeLabel} call ended (${durationStr})`);
         addCallHistory(get, set as any, 'completed');
       }
     }
@@ -441,7 +439,16 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       const current = get().currentCall;
 
       if (event.type === 'offer') {
+        if (event.restart) {
+          if (current && current.caller_id === event.callerId && current.state === 'connected') {
+            const answer = await callService.handleOfferAndCreateAnswer(event.sdp);
+            await callService.sendSignal(event.callerId, { type: 'answer', sdp: answer, receiverId: userId });
+          }
+          return;
+        }
         get().receiveCallOffer(event.callerId, userId, event.callType, event.sdp);
+      } else if (event.type === 'answer' && current?.state === 'connected') {
+        await callService.handleAnswer(event.sdp);
       } else if (event.type === 'answer' && current) {
         stopRingtone();
         clearAllTimers();
@@ -453,27 +460,13 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       } else if (event.type === 'busy') {
         stopRingtone();
         clearAllTimers();
-        chatService.sendMessage({
-          sender_id: current?.caller_id || userId,
-          receiver_id: current?.receiver_id || userId,
-          content: `${current?.call_type === 'video' ? 'Video' : 'Voice'} call – User busy`,
-          message_type: 'system',
-        });
+        logCallMessage(`${current?.call_type === 'video' ? 'Video' : 'Voice'} call – User busy`);
         addCallHistory(get, set as any, 'busy');
         callService.endCall();
         set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0 }));
       } else if (event.type === 'end-call' || event.type === 'reject-call') {
         stopRingtone();
         clearAllTimers();
-
-        if (event.type === 'reject-call' && current) {
-          chatService.sendMessage({
-            sender_id: current.caller_id,
-            receiver_id: current.receiver_id,
-            content: current.call_type === 'video' ? 'Declined video call' : 'Declined voice call',
-            message_type: 'system',
-          });
-        }
 
         addCallHistory(get, set as any, event.type === 'reject-call' ? 'rejected' : 'completed');
         callService.endCall();

@@ -3,21 +3,20 @@ import { logger } from './logger/logger';
 import type { CallType } from '../types';
 
 export type SignalingEvent =
-  | { type: 'offer'; callType: CallType; sdp: RTCSessionDescriptionInit; callerId: string }
+  | { type: 'offer'; callType: CallType; sdp: RTCSessionDescriptionInit; callerId: string; restart?: boolean }
   | { type: 'answer'; sdp: RTCSessionDescriptionInit; receiverId: string }
   | { type: 'ice-candidate'; candidate: RTCIceCandidateInit; senderId: string }
   | { type: 'end-call'; senderId: string }
   | { type: 'reject-call'; senderId: string }
   | { type: 'busy'; senderId: string };
 
-const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-  ],
-};
+const STUN_SERVERS: RTCIceServer[] = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun.cloudflare.com:3478' },
+];
+
+const SIGNAL_READY_TIMEOUT_MS = 5000;
 
 export class CallService {
   private peerConnection: RTCPeerConnection | null = null;
@@ -32,6 +31,28 @@ export class CallService {
   private signalingUserId: string | null = null;
   private signalingStatus = 'CLOSED';
   private recoveryTimer: number | null = null;
+  private iceServers: RTCIceServer[] = STUN_SERVERS;
+  private iceServersExpireAt = 0;
+
+  /**
+   * Fetch short-lived TURN relay credentials (only the couple can get them).
+   * Relays let calls connect on mobile data and strict Wi-Fi where direct links fail.
+   */
+  async loadIceServers(): Promise<void> {
+    if (!supabase || Date.now() < this.iceServersExpireAt) return;
+    try {
+      const { data, error } = await supabase.functions.invoke('turn-credentials');
+      if (error) throw error;
+      const relays = (data?.iceServers ?? []) as RTCIceServer[];
+      if (relays.length > 0) {
+        this.iceServers = [...STUN_SERVERS, ...relays];
+        this.iceServersExpireAt = Date.now() + ((data?.ttl ?? 3600) - 300) * 1000;
+      }
+    } catch (err) {
+      logger.warn('TURN credentials unavailable, using direct connections only:', err);
+      this.iceServersExpireAt = Date.now() + 60_000;
+    }
+  }
 
   setConnectionStateListener(fn: (state: RTCPeerConnectionState) => void) {
     this.onConnectionStateChange = fn;
@@ -115,11 +136,8 @@ export class CallService {
       return;
     }
     try {
-      if (!this.channel || this.signalingStatus !== 'SUBSCRIBED') {
-        this.recoverSignaling();
-        throw new Error('Call signaling is reconnecting');
-      }
-      const result = await this.channel.send({
+      if (!(await this.waitForSignaling())) throw new Error('Call signaling is not connected');
+      const result = await this.channel!.send({
         type: 'broadcast',
         event: 'signal',
         payload: { ...payload, targetUserId },
@@ -128,6 +146,18 @@ export class CallService {
     } catch (err) {
       logger.error('Error sending call signal:', err);
     }
+  }
+
+  /** Wait (briefly) for the signaling channel to be ready, reconnecting it if needed. */
+  private async waitForSignaling(): Promise<boolean> {
+    if (this.channel && this.signalingStatus === 'SUBSCRIBED') return true;
+    if (!this.channel || this.signalingStatus !== 'CONNECTING') this.recoverSignaling();
+    const deadline = Date.now() + SIGNAL_READY_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 100));
+      if (this.channel && this.signalingStatus === 'SUBSCRIBED') return true;
+    }
+    return false;
   }
 
   async getLocalMedia(callType: CallType, facingMode: 'user' | 'environment' = 'user'): Promise<MediaStream> {
@@ -177,11 +207,11 @@ export class CallService {
     if (this.peerConnection) {
       this.peerConnection.close();
     }
-    this.pendingIceCandidates = [];
+    // Keep candidates that arrived while ringing: they are needed once the offer is applied
 
     this.onRemoteStreamCallback = onRemoteStream;
     this.remoteStream = new MediaStream();
-    this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
+    this.peerConnection = new RTCPeerConnection({ iceServers: this.iceServers });
 
     this.peerConnection.ontrack = (event) => {
       // Add each track individually to the remote stream for stability
@@ -252,6 +282,11 @@ export class CallService {
     const answer = await this.peerConnection.createAnswer();
     await this.peerConnection.setLocalDescription(answer);
     return answer;
+  }
+
+  /** Forget candidates from a previous call before a new one starts ringing. */
+  resetPendingCandidates(): void {
+    this.pendingIceCandidates = [];
   }
 
   async handleAnswer(answer: RTCSessionDescriptionInit): Promise<void> {
