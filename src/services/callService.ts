@@ -8,7 +8,8 @@ export type SignalingEvent =
   | { type: 'ice-candidate'; candidate: RTCIceCandidateInit; senderId: string }
   | { type: 'end-call'; senderId: string }
   | { type: 'reject-call'; senderId: string }
-  | { type: 'busy'; senderId: string };
+  | { type: 'busy'; senderId: string }
+  | { type: 'answered-elsewhere'; senderId: string };
 
 const STUN_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -32,6 +33,7 @@ export class CallService {
   private signalingStatus = 'CLOSED';
   private recoveryTimer: number | null = null;
   private iceServers: RTCIceServer[] = STUN_SERVERS;
+  private seenSignalIds = new Set<string>();
   private iceServersExpireAt = 0;
 
   /**
@@ -81,14 +83,23 @@ export class CallService {
 
     channel
       .on('broadcast', { event: 'signal' }, ({ payload }) => {
+        if (this.channel !== channel) return; // a replaced channel can still deliver
         if (!payload || (payload as { targetUserId?: string }).targetUserId !== userId) return;
+        const sigId = (payload as { sigId?: string }).sigId;
+        if (sigId) {
+          if (this.seenSignalIds.has(sigId)) return; // same signal delivered twice
+          this.seenSignalIds.add(sigId);
+          if (this.seenSignalIds.size > 500) this.seenSignalIds.clear();
+        }
         logger.info('Received call signal:', payload?.type);
         if (this.onSignalingEventCallback) {
-          const { targetUserId: _targetUserId, ...event } = payload as SignalingEvent & { targetUserId: string };
+          const { targetUserId: _targetUserId, sigId: _sigId, ...event } = payload as SignalingEvent & { targetUserId: string; sigId?: string };
           this.onSignalingEventCallback(event);
         }
       })
       .subscribe((status) => {
+        // Status reports from a channel that was already replaced must not affect the new one
+        if (this.channel !== channel) return;
         this.signalingStatus = status;
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           this.scheduleRecovery();
@@ -140,7 +151,7 @@ export class CallService {
       const result = await this.channel!.send({
         type: 'broadcast',
         event: 'signal',
-        payload: { ...payload, targetUserId },
+        payload: { ...payload, targetUserId, sigId: crypto.randomUUID() },
       });
       if (result !== 'ok') throw new Error(`Signal delivery failed: ${result}`);
     } catch (err) {

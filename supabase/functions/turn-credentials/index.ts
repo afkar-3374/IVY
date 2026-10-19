@@ -1,5 +1,5 @@
-// Issues short-lived Cloudflare TURN relay credentials to the two partners only.
-// Secrets: CF_TURN_KEY_ID, CF_TURN_API_TOKEN (supabase secrets set ...)
+// Hands the TURN relay login to the two partners only, so it never ships in the website code.
+// Secrets: TURN_HOST (e.g. relay1.expressturn.com:3478), TURN_USERNAME, TURN_PASSWORD
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const TTL_SECONDS = 6 * 60 * 60;
@@ -20,17 +20,13 @@ Deno.serve(async (req) => {
   const { data: isMember } = await supabase.rpc('is_member');
   if (!isMember) return json({ error: 'forbidden' }, 403);
 
-  const keyId = Deno.env.get('CF_TURN_KEY_ID');
-  const token = Deno.env.get('CF_TURN_API_TOKEN');
-  if (!keyId || !token) return json({ iceServers: [], ttl: TTL_SECONDS });
+  const host = Deno.env.get('TURN_HOST')?.replace(/^turns?:/, '');
+  const username = Deno.env.get('TURN_USERNAME');
+  const credential = Deno.env.get('TURN_PASSWORD');
+  if (!host || !username || !credential) return json({ iceServers: [], ttl: TTL_SECONDS });
 
-  const res = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${keyId}/credentials/generate-ice-servers`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ttl: TTL_SECONDS }),
+  return json({
+    iceServers: [{ urls: [`turn:${host}?transport=udp`, `turn:${host}?transport=tcp`], username, credential }],
+    ttl: TTL_SECONDS,
   });
-  if (!res.ok) return json({ error: `turn provider ${res.status}` }, 502);
-  const data = await res.json();
-  const iceServers = Array.isArray(data.iceServers) ? data.iceServers : [data.iceServers];
-  return json({ iceServers, ttl: TTL_SECONDS });
 });

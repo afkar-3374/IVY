@@ -260,10 +260,17 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
   },
 
   receiveCallOffer: (callerId, receiverId, callType, offer) => {
-    if (get().currentCall) {
-      // Already in a call — respond with busy
+    const existing = get().currentCall;
+    if (existing && (existing.state === 'connected' || existing.state === 'outgoing')) {
+      // Really in a call (or calling) — respond with busy
       callService.sendSignal(callerId, { type: 'busy', senderId: receiverId });
       return;
+    }
+    if (existing) {
+      // Still ringing for an older call that was handled elsewhere: replace it
+      stopRingtone();
+      clearAllTimers();
+      callService.endCall();
     }
 
     const newSession: CallSession = {
@@ -341,6 +348,9 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       }
     );
 
+    // Stop the ringing on my other devices (broadcasts never echo back to this one)
+    void callService.sendSignal(current.receiver_id, { type: 'answered-elsewhere', senderId: current.receiver_id });
+
     const pendingOffer = (window as any).__pendingCallOffer;
     if (pendingOffer) {
       const answer = await callService.handleOfferAndCreateAnswer(pendingOffer);
@@ -366,6 +376,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
     const current = get().currentCall;
     if (current) {
       callService.sendSignal(current.caller_id, { type: 'reject-call', senderId: current.receiver_id });
+      void callService.sendSignal(current.receiver_id, { type: 'answered-elsewhere', senderId: current.receiver_id });
       logCallMessage(current.call_type === 'video' ? 'Declined video call' : 'Declined voice call');
       addCallHistory(get, set as any, 'rejected');
     }
@@ -455,6 +466,13 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
         await callService.handleAnswer(event.sdp);
         set(() => ({ currentCall: { ...current, state: 'connected', started_at: new Date().toISOString() } }));
         startCallTimer(set as any);
+      } else if (event.type === 'answered-elsewhere') {
+        if (current?.state === 'incoming') {
+          stopRingtone();
+          clearAllTimers();
+          callService.endCall();
+          set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0 }));
+        }
       } else if (event.type === 'ice-candidate') {
         await callService.addIceCandidate(event.candidate);
       } else if (event.type === 'busy') {

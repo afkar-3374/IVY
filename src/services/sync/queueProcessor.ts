@@ -9,6 +9,7 @@ import type { Message, MessageReaction } from '../../types';
 
 class QueueProcessor {
   private isProcessing = false;
+  private rerunRequested = false;
   private intervalId?: number;
 
   constructor() {
@@ -35,7 +36,12 @@ class QueueProcessor {
 
   public async processQueue(): Promise<void> {
     // Messages can only be encrypted (and so sent) while the chat is unlocked
-    if (this.isProcessing || !networkMonitor.isOnline() || !hasCoupleKey()) return;
+    if (!networkMonitor.isOnline() || !hasCoupleKey()) return;
+    if (this.isProcessing) {
+      // Something was queued mid-run: go again right after instead of waiting for the next tick
+      this.rerunRequested = true;
+      return;
+    }
 
     this.isProcessing = true;
     logger.sync('Starting queue processing turn...');
@@ -221,6 +227,10 @@ class QueueProcessor {
     } finally {
       this.isProcessing = false;
       logger.sync('Finished queue processing turn');
+      if (this.rerunRequested) {
+        this.rerunRequested = false;
+        void this.processQueue();
+      }
     }
   }
 }
