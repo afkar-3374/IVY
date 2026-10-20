@@ -12,6 +12,8 @@ import { LoveBurstOverlay } from '../components/Couple/LoveBurstOverlay';
 import { useCoupleStore } from '../store/useCoupleStore';
 import { useGameStore } from '../store/useGameStore';
 import { WeeklyScores } from '../components/Games/WeeklyScores';
+import { usePresenceStore } from '../store/usePresenceStore';
+import { pushService } from '../services/pushService';
 import { PetalBackground } from '../components/Couple/PetalBackground';
 import { CallOverlay } from '../components/Call/CallOverlay';
 import { queueProcessor } from '../services/sync/queueProcessor';
@@ -19,6 +21,7 @@ import { notificationService } from '../services/notificationService';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { WifiOff } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
 
 // Re-lock with the PIN after the app has been in the background this long
 const AUTO_LOCK_MS = 30_000;
@@ -41,6 +44,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   const isUnlocked = useAuthStore((state) => state.isAuthenticated && state.isUnlocked);
   const isChat = location.pathname === '/chat';
+  const reduceMotion = useReducedMotion();
   // Settings-style pages read best as a centered column on wide screens
   const isNarrowPage = ['/settings', '/profile', '/search', '/chat/info'].includes(location.pathname);
   // Phone: the chat screen has its own composer at the bottom, so no tab bar there
@@ -51,9 +55,14 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     if (!isUnlocked) return;
     const stopCouple = useCoupleStore.getState().init();
     const stopGames = useGameStore.getState().init();
+    // Online status on every screen (used to decide when a push is needed)
+    const me = useAuthStore.getState().user?.id;
+    const stopPresence = me ? usePresenceStore.getState().initPresenceChannel(me) : () => {};
+    void pushService.refresh();
     return () => {
       stopCouple();
       stopGames();
+      stopPresence();
     };
   }, [isUnlocked]);
 
@@ -113,7 +122,16 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             isChat ? `flex flex-col ${activePreset.bgClass}` : 'block overflow-y-auto'
           }`}
         >
-          {isNarrowPage ? <div className="w-full max-w-2xl mx-auto lg:py-4">{children}</div> : children}
+          {/* Smooth page entrance on every navigation */}
+          <motion.div
+            key={location.pathname}
+            initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
+            className={isChat ? 'flex-1 min-h-0 flex flex-col' : 'relative z-[1]'}
+          >
+            {isNarrowPage ? <div className="w-full max-w-2xl mx-auto lg:py-4">{children}</div> : children}
+          </motion.div>
         </main>
 
         {showNav && !isChat && <BottomTabBar />}

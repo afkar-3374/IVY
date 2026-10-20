@@ -5,6 +5,7 @@ import { ivyDb } from '../../db/ivyDb';
 import { logger } from '../logger/logger';
 import { supabase } from '../supabaseClient';
 import { seal, hasCoupleKey } from '../crypto/coupleCrypto';
+import { pushService } from '../pushService';
 import type { Message, MessageReaction } from '../../types';
 
 class QueueProcessor {
@@ -76,6 +77,7 @@ class QueueProcessor {
 
               if (!error && data) {
                 await conflictResolver.resolveMessageSync(msgPayload.local_uuid, data.id);
+                if (msgPayload.message_type !== 'system') void pushService.notifyPartner('message');
                 success = true;
               } else {
                 logger.error('Queue error sending message:', error?.message);

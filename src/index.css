@@ -93,3 +93,120 @@
   animation-timing-function: linear;
   animation-iteration-count: infinite;
 }
+
+/* ── Premium design system ─────────────────────────────────────── */
+@layer components {
+  /* Frosted glass surface with a lit top edge and soft depth */
+  .glass {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.55));
+    backdrop-filter: blur(22px) saturate(170%);
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.95),
+      0 1px 2px rgba(120, 40, 60, 0.04),
+      0 18px 40px -18px rgba(190, 60, 95, 0.28);
+  }
+  .dark .glass {
+    background: linear-gradient(145deg, rgba(40, 34, 48, 0.78), rgba(28, 24, 34, 0.6));
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 18px 40px -18px rgba(0, 0, 0, 0.6);
+  }
+
+  /* Glossy rose button with a light sweep on hover */
+  .btn-gloss {
+    position: relative;
+    overflow: hidden;
+    color: #fff;
+    background: linear-gradient(180deg, #F48AA0 0%, #E05A74 55%, #C9475F 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.45),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.08),
+      0 8px 20px -8px rgba(224, 90, 116, 0.65);
+    transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.2s ease, opacity 0.2s;
+  }
+  .btn-gloss::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.45) 50%, transparent 70%);
+    transform: translateX(-120%);
+    transition: transform 0.7s ease;
+  }
+  .btn-gloss:hover::after { transform: translateX(120%); }
+  .btn-gloss:hover { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 12px 26px -8px rgba(224, 90, 116, 0.75); }
+  .btn-gloss:active { transform: scale(0.97); }
+  .btn-gloss:disabled { opacity: 0.45; pointer-events: none; }
+
+  /* Lift on hover for interactive cards */
+  .lift { transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.35s ease; }
+  .lift:hover { transform: translateY(-3px); }
+
+  .text-gradient {
+    background: linear-gradient(120deg, #E05A74, #B65CD8 60%, #E05A74);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer-text 6s linear infinite;
+  }
+}
+
+@keyframes shimmer-text { to { background-position: 200% center; } }
+
+/* Ambient aurora glows */
+@keyframes aurora-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33% { transform: translate3d(6vw, -4vh, 0) scale(1.08); }
+  66% { transform: translate3d(-5vw, 5vh, 0) scale(0.95); }
+}
+.aurora-blob { animation: aurora-drift 26s ease-in-out infinite; will-change: transform; }
+
+/* Garden animations (SVG groups sway around their base) */
+.sway { transform-box: fill-box; transform-origin: 50% 100%; animation: sway 4s ease-in-out infinite; }
+@keyframes sway { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+.bloom { transform-box: fill-box; transform-origin: 50% 100%; animation: bloom 0.9s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+@keyframes bloom { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.breathe { transform-box: fill-box; transform-origin: 50% 100%; animation: breathe 5s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.03); } }
+.rise { animation: rise 6s ease-in infinite; }
+@keyframes rise {
+  0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
+  15% { opacity: 0.95; }
+  100% { transform: translate(var(--dx, 4px), -38px) scale(1.1); opacity: 0; }
+}
+.twinkle { animation: twinkle 3s ease-in-out infinite; }
+@keyframes twinkle { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+.drift { animation: drift 7s ease-in-out infinite; }
+@keyframes drift {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(3px, -2px); }
+  50% { transform: translate(-1px, -4px); }
+  75% { transform: translate(-3px, -1px); }
+}
+.rays { transform-box: fill-box; transform-origin: center; animation: rays 60s linear infinite; }
+@keyframes rays { to { transform: rotate(360deg); } }
+.shooting-star { animation: shooting 7s ease-in infinite; }
+@keyframes shooting {
+  0%, 85% { transform: translate(0, 0); opacity: 0; }
+  87% { opacity: 1; }
+  100% { transform: translate(-30px, 14px); opacity: 0; }
+}
+.cloud { animation: cloud 60s linear infinite; }
+@keyframes cloud { from { transform: translateX(-30px); } to { transform: translateX(130px); } }
+.petal-fall { animation: petal-scene 9s linear infinite; }
+@keyframes petal-scene {
+  0% { transform: translate(0, -10px) rotate(0deg); opacity: 0; }
+  10% { opacity: 0.9; }
+  100% { transform: translate(18px, 70px) rotate(240deg); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora-blob, .sway, .breathe, .rise, .twinkle, .drift, .rays, .shooting-star, .cloud, .petal-fall, .text-gradient, .petal { animation: none !important; }
+  .bloom { animation-duration: 0.01ms !important; }
+}
+.shooting-water { animation: water-flow 0.9s linear infinite; }
+@keyframes water-flow { to { stroke-dashoffset: -2.4; } }
+@media (prefers-reduced-motion: reduce) { .shooting-water { animation: none !important; } }

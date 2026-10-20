@@ -84,7 +84,7 @@ export const DailyQuestion: React.FC = () => {
           <button
             onClick={send}
             disabled={sending || !text.trim()}
-            className="self-end inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#F27A93] to-[#E05A74] text-white px-5 py-2 text-sm font-semibold disabled:opacity-50"
+            className="btn-gloss self-end inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold"
           >
             <Send className="w-4 h-4" /> Answer
           </button>
@@ -175,7 +175,7 @@ export const KnowMe: React.FC = () => {
                       await submitAnswer('know_me', r.key, { self: d.self, guess: d.guess });
                       void award('know_me', 2, `km-play:${r.key}`);
                     }}
-                    className="w-full mt-1 rounded-full bg-gradient-to-r from-[#F27A93] to-[#E05A74] text-white py-2 text-sm font-semibold disabled:opacity-40"
+                    className="btn-gloss w-full mt-1 rounded-full py-2 text-sm font-semibold"
                   >
                     Lock in
                   </button>

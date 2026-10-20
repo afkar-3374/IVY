@@ -3,6 +3,7 @@ import {
   gameService,
   type DailyGame,
   type GameAnswer,
+  type GardenBuild,
   type PointRow,
   type PointSource,
   type TicTacToe,
@@ -16,7 +17,11 @@ interface GameState {
   /** `${game}:${round}` → answers from both partners */
   answers: Record<string, GameAnswer[]>;
   board: TicTacToe | null;
+  builds: GardenBuild[];
+  /** Item most recently built (by either partner), for the build animation */
+  justBuilt: string | null;
   loaded: boolean;
+  build: (item: string, cost: number) => Promise<boolean>;
   init: () => () => void;
   award: (source: PointSource, points: number, ref: string) => Promise<void>;
   loadAnswers: (game: DailyGame, roundKeys: string[]) => Promise<void>;
@@ -31,14 +36,22 @@ export const useGameStore = create<GameState>((set, get) => ({
   points: [],
   answers: {},
   board: null,
+  builds: [],
+  justBuilt: null,
   loaded: false,
 
   init: () => {
     void (async () => {
-      const [points, board] = await Promise.all([gameService.getPoints(), gameService.getBoard()]);
-      set({ points, board, loaded: true });
+      const [points, board, builds] = await Promise.all([gameService.getPoints(), gameService.getBoard(), gameService.getBuilds()]);
+      set({ points, board, builds, loaded: true });
     })();
     return gameService.subscribe({
+      onBuild: (row) => {
+        if (get().builds.some((b) => b.item === row.item)) return;
+        set((s) => ({ builds: [...s.builds, row], justBuilt: row.item }));
+        const me = useAuthStore.getState().user?.id;
+        if (row.built_by !== me) useUIStore.getState().addToast('Something new was built in your garden 🏗️💞', 'success');
+      },
       onPoint: (row) => set((s) => (s.points.some((p) => p.id === row.id || (p.ref === row.ref && p.user_id === row.user_id))
         ? { points: s.points.map((p) => (p.ref === row.ref && p.user_id === row.user_id ? row : p)) }
         : { points: [row, ...s.points] })),
@@ -81,4 +94,23 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   refreshBoard: async () => set({ board: await gameService.getBoard() }),
+
+  build: async (item, cost) => {
+    const me = useAuthStore.getState().user?.id;
+    if (!me || get().builds.some((b) => b.item === item)) return false;
+    try {
+      await gameService.build(item, cost);
+      set((s) => ({
+        builds: s.builds.some((b) => b.item === item)
+          ? s.builds
+          : [...s.builds, { item, built_by: me, cost, created_at: new Date().toISOString() }],
+        justBuilt: item,
+      }));
+      return true;
+    } catch (err) {
+      logger.error('Unable to build:', err);
+      useUIStore.getState().addToast('Could not build — check your connection', 'error');
+      return false;
+    }
+  },
 }));

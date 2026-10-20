@@ -8,8 +8,7 @@ import { useCoupleStore } from '../../store/useCoupleStore';
 import { usePresenceStore } from '../../store/usePresenceStore';
 import { daysTogether, togetherSummary, upcomingDates, parseLocalDate, MOODS, moodLabel } from '../../utils/couple';
 
-export const cardClass =
-  'rounded-3xl bg-white/85 dark:bg-[#1E1D24]/85 backdrop-blur border border-rose-100/80 dark:border-stone-800 shadow-soft';
+export const cardClass = 'glass rounded-[1.75rem]';
 
 function useCouple() {
   const me = useAuthStore((s) => s.user);
@@ -69,7 +68,7 @@ export const CoupleHero: React.FC<{ compact?: boolean }> = ({ compact }) => {
             onChange={(e) => setDraft(e.target.value)}
             className="rounded-full border border-rose-200 dark:border-stone-700 bg-white dark:bg-[#16151A] px-4 py-2 text-sm"
           />
-          <button onClick={save} aria-label="Save date" className="w-9 h-9 rounded-full bg-[#E05A74] text-white flex items-center justify-center">
+          <button onClick={save} aria-label="Save date" className="btn-gloss w-9 h-9 rounded-full flex items-center justify-center">
             <Check className="w-4 h-4" />
           </button>
           <button onClick={() => setEditing(false)} aria-label="Cancel" className="w-9 h-9 rounded-full bg-stone-100 dark:bg-stone-800 flex items-center justify-center">
@@ -93,7 +92,7 @@ export const CoupleHero: React.FC<{ compact?: boolean }> = ({ compact }) => {
         loaded && (
           <button
             onClick={() => { setDraft(''); setEditing(true); }}
-            className="relative mt-3 inline-flex items-center gap-2 rounded-full bg-[#E05A74] text-white px-4 py-2 text-sm font-semibold"
+            className="btn-gloss mt-3 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold"
           >
             <CalendarHeart className="w-4 h-4" /> When did you get together?
           </button>
@@ -202,7 +201,7 @@ export const SpecialDatesCard: React.FC<{ limit?: number }> = ({ limit }) => {
           <button
             type="submit"
             disabled={saving || !title.trim() || !date}
-            className="rounded-full bg-[#E05A74] text-white px-4 py-2 text-sm font-semibold disabled:opacity-50"
+            className="btn-gloss rounded-full px-4 py-2 text-sm font-semibold"
           >
             Save
           </button>
@@ -272,7 +271,7 @@ export const LoveTapCard: React.FC = () => {
         whileTap={{ scale: 0.85 }}
         onClick={() => sendLove('tap')}
         aria-label="Send a love tap"
-        className="w-16 h-16 rounded-full bg-gradient-to-br from-[#F27A93] to-[#E05A74] text-white flex items-center justify-center shadow-rose-glow flex-shrink-0"
+        className="btn-gloss w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0"
       >
         <Heart className="w-8 h-8 fill-white" />
       </motion.button>

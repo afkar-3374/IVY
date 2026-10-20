@@ -19,6 +19,7 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { useUIStore } from '../store/useUIStore';
 import { Switch } from '../components/ui/Switch';
 import { notificationService } from '../services/notificationService';
+import { PushSetting } from '../components/Couple/PushPrompt';
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -162,6 +163,7 @@ const SettingsPage: React.FC = () => {
                 <div><p className="text-xs font-bold">Enable notifications</p><p className="text-[10px] text-stone-500">Alerts when Ivy is not active</p></div>
                 <Switch checked={notificationsEnabled} onChange={async (enabled) => { setNotificationsEnabled(enabled); if (enabled) await notificationService.requestPermission(); }} />
               </div>
+              <PushSetting />
               <div className="flex items-center justify-between"><span className="text-xs font-semibold">Messages</span><Switch checked={notifyMessages} onChange={setNotifyMessages} disabled={!notificationsEnabled} /></div>
               <div className="flex items-center justify-between"><span className="text-xs font-semibold">Calls</span><Switch checked={notifyCalls} onChange={setNotifyCalls} disabled={!notificationsEnabled} /></div>
               <div className="flex items-center justify-between"><span className="text-xs font-semibold">Sound</span><Switch checked={notifySound} onChange={setNotifySound} disabled={!notificationsEnabled} /></div>

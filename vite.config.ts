@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'pwa-icon.svg'],
+      includeAssets: ['favicon.ico', 'pwa-icon.svg', 'push-handler.js'],
       manifest: {
         name: 'Ivy - Private Couple Chat',
         short_name: 'Ivy',
@@ -28,7 +28,9 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}']
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Push notifications while the app is closed
+        importScripts: ['push-handler.js'],
       }
     })
   ],

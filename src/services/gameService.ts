@@ -22,6 +22,13 @@ export interface GameAnswer {
   created_at: string;
 }
 
+export interface GardenBuild {
+  item: string;
+  built_by: string;
+  cost: number;
+  created_at: string;
+}
+
 export interface TicTacToe {
   round: number;
   board: string;
@@ -154,7 +161,24 @@ class GameService {
     return (data?.length ?? 0) > 0;
   }
 
+  async getBuilds(): Promise<GardenBuild[]> {
+    if (!supabase) return [];
+    const { data, error } = await supabase.from('garden_builds').select('*').order('created_at');
+    if (error) {
+      logger.error('Unable to load garden builds:', error.message);
+      return [];
+    }
+    return data as GardenBuild[];
+  }
+
+  async build(item: string, cost: number): Promise<void> {
+    if (!supabase) return;
+    const { error } = await supabase.from('garden_builds').insert({ item, cost });
+    if (error && error.code !== '23505') throw new Error(error.message);
+  }
+
   subscribe(handlers: {
+    onBuild: (row: GardenBuild) => void;
     onPoint: (row: PointRow) => void;
     onAnswer: () => void;
     onBoard: (board: TicTacToe) => void;
@@ -165,6 +189,7 @@ class GameService {
       .channel('ivy_games')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'love_points' }, (p) => handlers.onPoint(p.new as PointRow))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_answers' }, () => handlers.onAnswer())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'garden_builds' }, (p) => handlers.onBuild(p.new as GardenBuild))
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tic_tac_toe' }, (p) => handlers.onBoard(p.new as TicTacToe))
       .subscribe();
     return () => {

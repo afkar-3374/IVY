@@ -7,6 +7,7 @@ import { useAuthStore } from './useAuthStore';
 import { useUIStore } from './useUIStore';
 import { useGameStore } from './useGameStore';
 import { todayKey } from '../data/gameQuestions';
+import { pushService } from '../services/pushService';
 
 interface LoveBurst {
   id: string;
@@ -141,6 +142,7 @@ export const useCoupleStore = create<CoupleState>((set, get) => ({
     navigator.vibrate?.(30);
     try {
       await coupleService.sendLove(kind);
+      void pushService.notifyPartner(kind);
       if (kind === 'tap') {
         // 1 point per love tap, up to 10 a day
         const me = useAuthStore.getState().user?.id;

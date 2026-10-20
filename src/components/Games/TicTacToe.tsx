@@ -5,6 +5,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { useGameStore } from '../../store/useGameStore';
 import { useUIStore } from '../../store/useUIStore';
 import { gameService, winningLine } from '../../services/gameService';
+import { pushService } from '../../services/pushService';
 import { cardClass } from '../Couple/CoupleCards';
 
 const MARKS: Record<string, string> = { X: '❤️', O: '💋' };
@@ -42,6 +43,7 @@ export const TicTacToe: React.FC = () => {
     try {
       const ok = await gameService.move(me.id, partner.id, board, cell);
       if (!ok) await refreshBoard();
+      else void pushService.notifyPartner('game');
     } catch {
       addToast('Move not saved — try again', 'error');
     } finally {

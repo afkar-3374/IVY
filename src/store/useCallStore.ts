@@ -5,6 +5,7 @@ import { chatService } from '../services/chatService';
 import { logger } from '../services/logger/logger';
 import { ivyDb } from '../db/ivyDb';
 import { useAuthStore } from './useAuthStore';
+import { pushService } from '../services/pushService';
 
 const CALL_TIMEOUT_SECONDS = 45; // Unanswered call timeout
 const RINGING_FALLBACK_SECONDS = 50; // Receiver stops ringing if the caller's end signal is lost
@@ -243,6 +244,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       sdp: offer,
       callerId,
     });
+    void pushService.notifyPartner('call');
 
     // Auto-timeout if unanswered
     callTimeoutTimer = setTimeout(() => {

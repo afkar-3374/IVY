@@ -52,7 +52,7 @@ const ChatPage: React.FC = () => {
   const currentUser = useAuthStore((state) => state.user);
   const partnerUser = useAuthStore((state) => state.getPartnerProfile());
   const sendLove = useCoupleStore((state) => state.sendLove);
-  const { subtext, partnerPresence, initPresenceChannel } = usePresence();
+  const { subtext, partnerPresence } = usePresence();
   const { messages, isLoadingMessages } = useInfiniteMessages();
   const { triggerTyping } = useTyping();
   const addToast = useUIStore((state) => state.addToast);
@@ -107,17 +107,13 @@ const ChatPage: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Setup presence channel & initial message load
+  // (Online status is tracked app-wide in AppLayout)
   useEffect(() => {
     if (currentUser) {
-      const cleanupPresence = initPresenceChannel(currentUser.id);
       loadInitialMessages();
       markAsRead(partnerUser.id, currentUser.id);
-
-      return () => {
-        cleanupPresence();
-      };
     }
-  }, [currentUser?.id, initPresenceChannel, loadInitialMessages, markAsRead, partnerUser.id]);
+  }, [currentUser?.id, loadInitialMessages, markAsRead, partnerUser.id]);
 
   // Mark unread messages as read when new messages arrive
   useEffect(() => {
