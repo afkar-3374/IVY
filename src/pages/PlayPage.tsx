@@ -3,7 +3,7 @@ import { Reveal } from '../components/ui/Reveal';
 import { Link } from 'react-router-dom';
 import { HandHeart } from 'lucide-react';
 import { WeeklyScores } from '../components/Games/WeeklyScores';
-import { DailyQuestion, KnowMe, WouldYouRatherGame } from '../components/Games/DailyGames';
+import { DailyQuestion, WouldYouRatherGame } from '../components/Games/DailyGames';
 import { TicTacToe } from '../components/Games/TicTacToe';
 import { cardClass } from '../components/Couple/CoupleCards';
 
@@ -17,11 +17,10 @@ const PlayPage: React.FC = () => (
       <div className="flex flex-col gap-4 lg:gap-6">
         <Reveal index={0}><WeeklyScores /></Reveal>
         <Reveal index={1}><DailyQuestion /></Reveal>
-        <Reveal index={2}><TicTacToe /></Reveal>
       </div>
       <div className="flex flex-col gap-4 lg:gap-6">
-        <Reveal index={3}><KnowMe /></Reveal>
-        <Reveal index={4}><WouldYouRatherGame /></Reveal>
+        <Reveal index={2}><WouldYouRatherGame /></Reveal>
+        <Reveal index={3}><TicTacToe /></Reveal>
         <Link to="/love" className={`${cardClass} lift p-5 flex items-center gap-4`}>
           <div className="btn-gloss w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0">
             <HandHeart className="w-6 h-6" />

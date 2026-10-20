@@ -53,45 +53,6 @@ export const DAILY_QUESTIONS = [
   'What do you want our love to feel like in ten years?',
 ];
 
-export interface KnowMeQuestion {
-  q: string;
-  options: string[];
-}
-
-/** Phrased about "me" — each partner answers for themselves and guesses the other. */
-export const KNOW_ME_QUESTIONS: KnowMeQuestion[] = [
-  { q: 'My favourite season?', options: ['Spring 🌸', 'Summer ☀️', 'Autumn 🍂', 'Winter ❄️'] },
-  { q: 'My go-to comfort food?', options: ['Biryani 🍛', 'Pizza 🍕', 'Ice cream 🍨', 'Chocolate 🍫'] },
-  { q: 'My dream holiday?', options: ['Beach 🏝️', 'Mountains 🏔️', 'Big city 🏙️', 'Countryside 🌾'] },
-  { q: 'My favourite time of day?', options: ['Early morning 🌅', 'Afternoon 🌤️', 'Evening 🌇', 'Late night 🌙'] },
-  { q: 'What I would rather watch?', options: ['Romance 💕', 'Comedy 😂', 'Thriller 🔪', 'Anime ✨'] },
-  { q: 'My love language?', options: ['Words 💬', 'Hugs 🤗', 'Gifts 🎁', 'Quality time ⏳'] },
-  { q: 'My favourite drink?', options: ['Tea ☕', 'Coffee ☕', 'Juice 🧃', 'Milkshake 🥤'] },
-  { q: 'When I am stressed I…', options: ['Sleep 😴', 'Eat 🍟', 'Listen to music 🎧', 'Talk to you 💌'] },
-  { q: 'My favourite flower?', options: ['Rose 🌹', 'Sunflower 🌻', 'Tulip 🌷', 'Lotus 🪷'] },
-  { q: 'My ideal weekend?', options: ['Stay in bed 🛏️', 'Go out with you 💑', 'Shopping 🛍️', 'Gaming 🎮'] },
-  { q: 'The pet I would choose?', options: ['Cat 🐱', 'Dog 🐶', 'Bunny 🐰', 'Fish 🐠'] },
-  { q: 'My favourite colour?', options: ['Pink 💗', 'Blue 💙', 'Purple 💜', 'Black 🖤'] },
-  { q: 'My biggest fear?', options: ['Heights 🧗', 'Darkness 🌑', 'Insects 🕷️', 'Losing you 💔'] },
-  { q: 'I am more of a…', options: ['Morning person 🐓', 'Night owl 🦉', 'Both 😅', 'Neither 😴'] },
-  { q: 'My favourite dessert?', options: ['Cake 🍰', 'Ice cream 🍦', 'Gulab jamun 🍮', 'Cookies 🍪'] },
-  { q: 'What I would buy first if I won the lottery?', options: ['A house 🏡', 'A car 🚗', 'A trip ✈️', 'Gifts for you 🎁'] },
-  { q: 'My favourite way to say I love you?', options: ['Text 📱', 'Voice note 🎤', 'In person 💋', 'A surprise 🎉'] },
-  { q: 'How I like my weekends to start?', options: ['Sleeping in 💤', 'Big breakfast 🥞', 'Workout 🏃', 'Call with you 📞'] },
-  { q: 'My superpower would be…', options: ['Teleporting 🌀', 'Invisibility 👻', 'Flying 🕊️', 'Reading minds 🧠'] },
-  { q: 'Which gift would make me happiest?', options: ['A letter 💌', 'Flowers 💐', 'Jewellery 💍', 'A day together 🗓️'] },
-  { q: 'My favourite kind of weather?', options: ['Rainy 🌧️', 'Sunny ☀️', 'Snowy 🌨️', 'Cloudy ☁️'] },
-  { q: 'What I would rather have for dinner?', options: ['Home-cooked 🍲', 'Street food 🌮', 'Fancy restaurant 🍽️', 'Takeaway 🥡'] },
-  { q: 'My favourite emoji?', options: ['❤️', '😂', '🥺', '😘'] },
-  { q: 'The movie genre I fall asleep to?', options: ['Documentary 📚', 'Romance 💞', 'Action 💥', 'Horror 👻'] },
-  { q: 'How I would spend a rainy day?', options: ['Movies 🎬', 'Reading 📖', 'Cooking 🍳', 'Cuddling 🫂'] },
-  { q: 'My dream date?', options: ['Candlelight dinner 🕯️', 'Picnic 🧺', 'Stargazing ✨', 'Road trip 🚗'] },
-  { q: 'What I notice first about someone?', options: ['Eyes 👀', 'Smile 😊', 'Voice 🎵', 'Style 👗'] },
-  { q: 'My favourite snack?', options: ['Chips 🥔', 'Chocolate 🍫', 'Fruit 🍓', 'Popcorn 🍿'] },
-  { q: 'If I could live anywhere?', options: ['By the sea 🌊', 'In the hills ⛰️', 'Big city 🌆', 'Abroad 🌍'] },
-  { q: 'Which would I pick for our anniversary?', options: ['Trip ✈️', 'Dinner 🍷', 'Handmade gift 🎨', 'Quiet day home 🏠'] },
-];
-
 export interface WouldYouRather {
   a: string;
   b: string;

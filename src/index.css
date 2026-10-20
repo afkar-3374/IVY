@@ -203,8 +203,22 @@
   100% { transform: translate(18px, 70px) rotate(240deg); opacity: 0; }
 }
 
+/* Butterflies wander around their spot and flap */
+.flutter { animation: flutter 14s ease-in-out infinite; }
+@keyframes flutter {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(14px, -9px); }
+  40% { transform: translate(26px, 2px); }
+  60% { transform: translate(12px, 8px); }
+  80% { transform: translate(-8px, -4px); }
+}
+.flap { transform-box: fill-box; transform-origin: center; animation: flap 0.3s ease-in-out infinite alternate; }
+@keyframes flap { from { transform: scaleX(1); } to { transform: scaleX(0.25); } }
+.rainbow { animation: rainbow-in 2.4s ease-out both; }
+@keyframes rainbow-in { from { opacity: 0; } to { opacity: 0.5; } }
+
 @media (prefers-reduced-motion: reduce) {
-  .aurora-blob, .sway, .breathe, .rise, .twinkle, .drift, .rays, .shooting-star, .cloud, .petal-fall, .text-gradient, .petal { animation: none !important; }
+  .aurora-blob, .sway, .breathe, .rise, .twinkle, .drift, .rays, .shooting-star, .cloud, .petal-fall, .text-gradient, .petal, .flutter, .flap, .rainbow { animation: none !important; }
   .bloom { animation-duration: 0.01ms !important; }
 }
 .shooting-water { animation: water-flow 0.9s linear infinite; }
@@ -232,3 +246,55 @@
 .online-pulse { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55); animation: online-pulse 2.4s ease-out infinite; }
 @keyframes online-pulse { 70% { box-shadow: 0 0 0 7px rgba(52, 211, 153, 0); } 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); } }
 @media (prefers-reduced-motion: reduce) { .online-pulse { animation: none !important; } }
+
+/* ── WhatsApp-style chat ─────────────────────────────────────────── */
+.wa-chat {
+  font-family: -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  background-color: #efeae2;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%23000' stroke-opacity='0.06' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 26c-5-3.5-6.5-7-4.4-9.1 1.4-1.4 3.4-.8 4.4.8 1-1.6 3-2.2 4.4-.8 2.1 2.1.6 5.6-4.4 9.1z'/%3E%3Ccircle cx='86' cy='22' r='5'/%3E%3Cpath d='M58 58l3 6 6 1-4.5 4 1 6-5.5-3-5.5 3 1-6-4.5-4 6-1z'/%3E%3Cpath d='M98 74c-5-3.5-6.5-7-4.4-9.1 1.4-1.4 3.4-.8 4.4.8 1-1.6 3-2.2 4.4-.8 2.1 2.1.6 5.6-4.4 9.1z'/%3E%3Cpath d='M18 92c4-6 10-6 14 0'/%3E%3Cpath d='M70 100l6-6M76 100l-6-6'/%3E%3Cpath d='M40 6c2 3 6 3 8 0'/%3E%3C/g%3E%3C/svg%3E");
+}
+.dark .wa-chat {
+  background-color: #0b141a;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%23fff' stroke-opacity='0.05' stroke-width='1.3' stroke-linecap='round'%3E%3Cpath d='M20 26c-5-3.5-6.5-7-4.4-9.1 1.4-1.4 3.4-.8 4.4.8 1-1.6 3-2.2 4.4-.8 2.1 2.1.6 5.6-4.4 9.1z'/%3E%3Ccircle cx='86' cy='22' r='5'/%3E%3Cpath d='M58 58l3 6 6 1-4.5 4 1 6-5.5-3-5.5 3 1-6-4.5-4 6-1z'/%3E%3C/g%3E%3C/svg%3E");
+}
+.wa-bubble {
+  position: relative;
+  border-radius: 7.5px;
+  padding: 6px 7px 8px 9px;
+  font-size: 14.2px;
+  line-height: 19px;
+  color: #111b21;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+}
+.wa-out { background: #ffe1e8; }
+.wa-in { background: #ffffff; }
+.dark .wa-bubble { color: #e9edef; }
+.dark .wa-out { background: #6b2a3d; }
+.dark .wa-in { background: #202c33; }
+/* tails on the first bubble of a run */
+.wa-tail.wa-out { border-top-right-radius: 0; }
+.wa-tail.wa-in { border-top-left-radius: 0; }
+.wa-tail::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 8px;
+  height: 13px;
+}
+.wa-tail.wa-out::before { right: -8px; background: inherit; clip-path: polygon(0 0, 100% 0, 0 100%); }
+.wa-tail.wa-in::before { left: -8px; background: inherit; clip-path: polygon(0 0, 100% 0, 100% 100%); }
+.wa-meta { font-size: 11px; color: #667781; }
+.dark .wa-meta { color: rgba(233, 237, 239, 0.6); }
+.wa-pill {
+  background: #ffffff;
+  color: #54656f;
+  font-size: 12.5px;
+  border-radius: 7.5px;
+  padding: 5px 12px 6px;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+}
+.dark .wa-pill { background: #182229; color: #8696a0; }
+.wa-header { background: #f0f2f5; }
+.dark .wa-header { background: #202c33; }
+.wa-input { background: #ffffff; }
+.dark .wa-input { background: #2a3942; color: #e9edef; }

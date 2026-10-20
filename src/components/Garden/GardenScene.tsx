@@ -110,7 +110,22 @@ interface GardenSceneProps {
   builds: string[];
   /** Item to animate into place */
   justBuilt: string | null;
+  /** Both of you watered today */
+  rainbow?: boolean;
 }
+
+const BUTTERFLY_COLOURS = ['#FF8FB0', '#C38BFF', '#FFC56B', '#7CD4F5'];
+
+/** A little butterfly drawn around 0,0, flapping in place (the parent moves it). */
+const Butterfly: React.FC<{ colour: string; flap: number }> = ({ colour, flap }) => (
+  <g className="flap" style={{ animationDuration: `${flap}s` }}>
+    <ellipse cx="-1.5" cy="-1" rx="1.7" ry="2.2" fill={colour} transform="rotate(-25 -1.5 -1)" />
+    <ellipse cx="1.5" cy="-1" rx="1.7" ry="2.2" fill={colour} transform="rotate(25 1.5 -1)" />
+    <ellipse cx="-1.1" cy="1.3" rx="1.1" ry="1.3" fill={colour} opacity="0.85" />
+    <ellipse cx="1.1" cy="1.3" rx="1.1" ry="1.3" fill={colour} opacity="0.85" />
+    <rect x="-0.3" y="-2" width="0.6" height="4.2" rx="0.3" fill="#4A3048" />
+  </g>
+);
 
 const PlacedItem: React.FC<{ item: GardenItem; night: boolean; isNew: boolean }> = ({ item, night, isNew }) => {
   const Drawing = DRAWINGS[item.id];
@@ -124,7 +139,7 @@ const PlacedItem: React.FC<{ item: GardenItem; night: boolean; isNew: boolean }>
 };
 
 /** The animated love garden. Purely visual; growth comes from `total` and `level`. */
-export const GardenScene: React.FC<GardenSceneProps> = ({ total, level, progress, phase, stars, watering, label, builds, justBuilt }) => {
+export const GardenScene: React.FC<GardenSceneProps> = ({ total, level, progress, phase, stars, watering, label, builds, justBuilt, rainbow }) => {
   const [bursts, setBursts] = useState<Burst[]>([]);
   const night = phase === 'night';
   const sky = SKIES[phase];
@@ -175,6 +190,9 @@ export const GardenScene: React.FC<GardenSceneProps> = ({ total, level, progress
     () => Array.from({ length: 90 }, (_, i) => ({ x: (i / 90) * 162 - 1, h: 3 + seeded(i + 1200) * 4, d: seeded(i + 1300) * 3 })),
     []
   );
+
+  // More butterflies as the garden grows (daytime only)
+  const butterflies = night ? 0 : Math.min(6, 1 + Math.floor(level / 2));
 
   const treeScale = level <= 1 ? 0.22 : 0.26 + level * 0.04 + progress * 0.04;
   const risingHearts = Math.min(8, Math.max(0, level - 2));
@@ -277,6 +295,15 @@ export const GardenScene: React.FC<GardenSceneProps> = ({ total, level, progress
           </>
         )}
 
+        {/* ── Rainbow on days you both watered ── */}
+        {rainbow && !night && (
+          <g className="rainbow" opacity="0.5">
+            {['#FF6B8B', '#FFA26B', '#FFE07A', '#8FE3A0', '#7CC4F5', '#B48CFF'].map((c, i) => (
+              <path key={c} d={`M${14 + i * 2.2} 70 A ${52 - i * 2.2} ${46 - i * 2.2} 0 0 1 ${118 - i * 2.2} 70`} stroke={c} strokeWidth="2.3" fill="none" />
+            ))}
+          </g>
+        )}
+
         {/* ── Land layers ── */}
         <path d="M0 62 L 18 46 L 32 56 L 50 40 L 70 55 L 88 44 L 108 57 L 126 42 L 146 54 L 160 47 V 100 H 0 Z" fill="url(#mountain)" opacity="0.9" />
         <path d="M0 66 Q 40 54 80 64 T 160 60 V 100 H 0 Z" fill="url(#hillFar)" />
@@ -361,6 +388,16 @@ export const GardenScene: React.FC<GardenSceneProps> = ({ total, level, progress
               style={{ animationDelay: `${i * 1.4}s`, animationDuration: `${8 + (i % 3) * 2}s` }}
             />
           ))}
+        {/* ── Butterflies ── */}
+        {Array.from({ length: butterflies }, (_, i) => (
+          <g key={i} transform={`translate(${18 + seeded(i + 1500) * 120} ${48 + seeded(i + 1600) * 30})`}>
+            <g className="flutter" style={{ animationDuration: `${11 + seeded(i + 1700) * 8}s`, animationDelay: `${-seeded(i + 1800) * 10}s` }}>
+              <g transform="scale(0.9)">
+                <Butterfly colour={BUTTERFLY_COLOURS[i % BUTTERFLY_COLOURS.length]} flap={0.22 + seeded(i + 1900) * 0.12} />
+              </g>
+            </g>
+          </g>
+        ))}
       </svg>
 
       {/* Tap bursts */}

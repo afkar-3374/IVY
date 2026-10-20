@@ -4,10 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   MoreVertical,
   Smile,
-  Send,
   X,
-  ChevronLeft,
-  Heart,
   ChevronDown,
   Search,
   CornerDownLeft,
@@ -17,16 +14,18 @@ import {
   Video,
   Trash2,
   Pause,
-  Play,
   Camera,
-  Plus,
   Paperclip,
   Phone,
+  ArrowLeft,
+  Check,
+  Lock,
+  Pin,
+  SendHorizontal,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useChatStore } from '../store/useChatStore';
 import { useCallStore } from '../store/useCallStore';
-import { useCoupleStore } from '../store/useCoupleStore';
 import { usePresence } from '../hooks/usePresence';
 import { useInfiniteMessages } from '../hooks/useInfiniteMessages';
 import { useTyping } from '../hooks/useTyping';
@@ -51,7 +50,6 @@ const ChatPage: React.FC = () => {
   const navigate = useNavigate();
   const currentUser = useAuthStore((state) => state.user);
   const partnerUser = useAuthStore((state) => state.getPartnerProfile());
-  const sendLove = useCoupleStore((state) => state.sendLove);
   const { subtext, partnerPresence } = usePresence();
   const { messages, isLoadingMessages } = useInfiniteMessages();
   const { triggerTyping } = useTyping();
@@ -105,7 +103,7 @@ const ChatPage: React.FC = () => {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Setup presence channel & initial message load
   // (Online status is tracked app-wide in AppLayout)
@@ -299,6 +297,14 @@ const ChatPage: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length, targetMessageId]);
 
+  // Grow the message box with its text (up to ~6 lines), like WhatsApp
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [inputContent]);
+
   // Focus input on active reply target selection
   useEffect(() => {
     if (activeReplyTarget && inputRef.current) {
@@ -318,7 +324,7 @@ const ChatPage: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleSend = async (e: React.FormEvent) => {
+  const handleSend = async (e: React.SyntheticEvent) => {
     e.preventDefault();
     if (!inputContent.trim() || !currentUser) return;
 
@@ -449,7 +455,7 @@ const ChatPage: React.FC = () => {
     if (wallpaper === 'blush') return 'bg-gradient-to-br from-pink-50 via-rose-50 to-red-50 dark:from-[#2A1520] dark:to-[#1A1020]';
     if (wallpaper === 'aurora') return 'bg-gradient-to-br from-violet-900 via-purple-800 to-blue-900 text-white';
     if (wallpaper === 'minimal') return 'bg-[#FDF8F6] dark:bg-[#16151A]';
-    return 'bg-[#FDF8F6] dark:bg-[#16151A]'; // botanical + default
+    return 'wa-chat'; // botanical + default: WhatsApp-style doodles
   };
 
   const customWallpaperStyle =
@@ -464,6 +470,9 @@ const ChatPage: React.FC = () => {
     if (type === 'document' || type === 'file') return <FileText className="w-3.5 h-3.5 text-[#C95565]" />;
     return <CornerDownLeft className="w-3.5 h-3.5 text-[#C95565]" />;
   };
+
+  const hasText = inputContent.trim().length > 0;
+  const isTyping = subtext.includes('Typing') || subtext.includes('Recording');
 
   return (
     <div
@@ -501,7 +510,7 @@ const ChatPage: React.FC = () => {
 
       {/* Desktop Drag & Drop Visual Dropzone Overlay */}
       {isDraggingOver && (
-        <div className="absolute inset-0 z-50 bg-[#C95565]/90 backdrop-blur-md flex flex-col items-center justify-center text-white border-4 border-dashed border-white m-4 rounded-3xl animate-pulse">
+        <div className="absolute inset-0 z-50 bg-[#C95565]/90 backdrop-blur-md flex flex-col items-center justify-center text-white border-4 border-dashed border-white m-4 rounded-3xl">
           <Paperclip className="w-16 h-16 mb-2" />
           <h3 className="text-xl font-bold">Drop files here to send ❤️</h3>
           <p className="text-xs opacity-80">Images, videos, & documents supported</p>
@@ -509,70 +518,49 @@ const ChatPage: React.FC = () => {
       )}
 
       {/* Header */}
-      <header className="glass !rounded-none !border-x-0 !border-t-0 sticky top-0 z-30 px-3 sm:px-4 py-2.5 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+      <header className="wa-header sticky top-0 z-30 pl-1 pr-1.5 sm:pl-3 py-2 flex items-center justify-between flex-shrink-0 shadow-[0_1px_0_rgba(11,20,26,0.08)] dark:shadow-[0_1px_0_rgba(255,255,255,0.04)]">
+        <div className="flex items-center min-w-0 flex-1">
           <button
             onClick={() => navigate('/us')}
-            aria-label="Back to Us"
-            className="lg:hidden p-1 rounded-full text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+            aria-label="Back"
+            className="lg:hidden p-1.5 rounded-full text-[#54656f] dark:text-[#aebac1] active:bg-black/5"
           >
-            <ChevronLeft className="w-6 h-6" />
+            <ArrowLeft className="w-6 h-6" />
           </button>
 
           <div
             onClick={() => navigate('/chat/info')}
-            className="flex items-center gap-2.5 cursor-pointer active-scale min-w-0"
+            className="flex items-center gap-2.5 cursor-pointer min-w-0 flex-1 py-0.5 pr-2"
           >
-            <div className="relative">
-              {partnerPresence.online && <span className="online-pulse absolute inset-0 rounded-full" />}
-              <Avatar src={partnerUser.avatar_url} name={partnerDisplayName} size="md" isOnline={partnerPresence.online} />
-            </div>
+            <Avatar src={partnerUser.avatar_url} name={partnerDisplayName} size="md" />
             <div className="min-w-0">
-              <h2 className="text-sm font-bold text-stone-900 dark:text-stone-100 leading-tight flex items-center gap-1 truncate">
+              <h2 className="text-[16px] font-medium text-[#111b21] dark:text-[#e9edef] leading-tight flex items-center gap-1 truncate">
                 {partnerDisplayName}
-                {partnerUser.mood && <span title="Mood" className="text-base leading-none">{partnerUser.mood}</span>}
+                {partnerUser.mood && <span title="Mood" className="text-sm leading-none">{partnerUser.mood}</span>}
               </h2>
-              <AnimatePresence mode="wait">
-                <motion.p
-                  key={subtext}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.18 }}
-                  className={`text-[11px] font-semibold truncate flex items-center gap-1 ${
-                    subtext.includes('Typing') || subtext.includes('Recording')
-                      ? 'text-[#E05A74]'
-                      : partnerPresence.online
-                      ? 'text-emerald-600'
-                      : 'text-stone-400 dark:text-stone-400'
-                  }`}
-                >
-                  {subtext.includes('Typing') ? (
-                    <>
-                      typing
-                      <span className="inline-flex gap-0.5 ml-0.5">
-                        {[0, 1, 2].map((i) => (
-                          <span key={i} className="typing-dot w-1 h-1 rounded-full bg-[#E05A74]" style={{ animationDelay: `${i * 0.15}s` }} />
-                        ))}
-                      </span>
-                    </>
-                  ) : (
-                    subtext
-                  )}
-                </motion.p>
-              </AnimatePresence>
+              <p
+                className={`text-[13px] leading-tight truncate ${
+                  isTyping ? 'text-[#E05A74]' : 'text-[#667781] dark:text-[#8696a0]'
+                }`}
+              >
+                {isTyping ? subtext.toLowerCase().replace('...', '…') : partnerPresence.online ? 'online' : subtext}
+              </p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-0.5 text-stone-600 dark:text-stone-300 flex-shrink-0">
+        <div className="flex items-center text-[#54656f] dark:text-[#aebac1] flex-shrink-0">
           <button
-            onClick={() => sendLove('tap')}
-            className="p-2 rounded-full text-[#E05A74] hover:bg-[#E05A74]/10 active:scale-75 transition-transform"
-            title="Send a love tap"
-            aria-label="Send a love tap"
+            onClick={() => {
+              if (currentUser && partnerUser) {
+                useCallStore.getState().startCall(currentUser.id, partnerUser.id, 'video');
+              }
+            }}
+            className="p-2.5 rounded-full active:bg-black/5 dark:active:bg-white/5"
+            title="Video call"
+            aria-label="Video call"
           >
-            <Heart className="w-5 h-5 fill-[#E05A74]/25" />
+            <Video className="w-[22px] h-[22px]" />
           </button>
           <button
             onClick={() => {
@@ -580,37 +568,25 @@ const ChatPage: React.FC = () => {
                 useCallStore.getState().startCall(currentUser.id, partnerUser.id, 'audio');
               }
             }}
-            className="p-2 rounded-full text-[#C95565] hover:bg-[#C95565]/10 active-scale"
-            title="Start Voice Call"
-            aria-label="Start Voice Call"
+            className="p-2.5 rounded-full active:bg-black/5 dark:active:bg-white/5"
+            title="Voice call"
+            aria-label="Voice call"
           >
             <Phone className="w-5 h-5" />
           </button>
           <button
-            onClick={() => {
-              if (currentUser && partnerUser) {
-                useCallStore.getState().startCall(currentUser.id, partnerUser.id, 'video');
-              }
-            }}
-            className="p-2 rounded-full text-[#C95565] hover:bg-[#C95565]/10 active-scale"
-            title="Start Video Call"
-            aria-label="Start Video Call"
-          >
-            <Video className="w-5 h-5" />
-          </button>
-          <button
             onClick={() => navigate('/search')}
-            className="hidden sm:block p-2 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 active-scale"
-            title="Search Messages"
-            aria-label="Search Messages"
+            className="hidden sm:block p-2.5 rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+            title="Search messages"
+            aria-label="Search messages"
           >
             <Search className="w-5 h-5" />
           </button>
           <button
             onClick={() => navigate('/chat/info')}
-            className="p-2 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 active-scale"
-            title="Chat Info"
-            aria-label="Chat Info"
+            className="p-2 rounded-full active:bg-black/5 dark:active:bg-white/5"
+            title="Chat info"
+            aria-label="Chat info"
           >
             <MoreVertical className="w-5 h-5" />
           </button>
@@ -626,20 +602,16 @@ const ChatPage: React.FC = () => {
             const target = pinnedMessages[nextIdx];
             jumpToOriginalMessage(target.local_uuid);
           }}
-          className="bg-white/90 dark:bg-[#18171F]/90 px-4 py-2 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between z-20 flex-shrink-0 cursor-pointer active-scale backdrop-blur-sm"
+          className="wa-header px-4 py-2 border-t border-black/5 dark:border-white/5 flex items-center gap-3 z-20 flex-shrink-0 cursor-pointer"
         >
-          <div className="flex items-center gap-2 overflow-hidden">
-            <span className="text-xs text-[#C95565]">📌</span>
-            <div className="text-xs truncate">
-              <span className="font-bold text-stone-900 dark:text-stone-100 mr-1">Pinned:</span>
-              <span className="text-stone-600 dark:text-stone-300 italic">
-                {pinnedMessages[activePinnedIndex % pinnedMessages.length].content}
-              </span>
-            </div>
+          <span className="w-0.5 self-stretch rounded-full bg-[#E05A74]" />
+          <div className="text-[13px] truncate flex-1 min-w-0">
+            <p className="text-[#E05A74] text-xs font-medium">Pinned message{pinnedMessages.length > 1 ? ` ${activePinnedIndex + 1}/${pinnedMessages.length}` : ''}</p>
+            <p className="text-[#667781] dark:text-[#8696a0] truncate">
+              {pinnedMessages[activePinnedIndex % pinnedMessages.length].content}
+            </p>
           </div>
-          <span className="text-[10px] font-bold text-stone-400 ml-2">
-            {activePinnedIndex + 1}/{pinnedMessages.length}
-          </span>
+          <Pin className="w-4 h-4 text-[#8696a0] flex-shrink-0" />
         </div>
       )}
 
@@ -647,29 +619,33 @@ const ChatPage: React.FC = () => {
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="chat-wallpaper flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 sm:px-6 pt-2 pb-4 relative"
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-1.5 sm:px-[6%] pt-2 pb-3 relative"
       >
         {isLoadingMessages && messages.length === 0 && (
-          <div className="text-center py-4 text-xs text-stone-400">Loading messages...</div>
+          <div className="flex justify-center py-4"><span className="wa-pill">Loading messages…</span></div>
+        )}
+
+        {/* WhatsApp-style encryption notice at the top of the chat */}
+        {!isLoadingMessages && (
+          <div className="flex justify-center mt-2 mb-3 px-6">
+            <p className="wa-pill !bg-[#ffeecd] dark:!bg-[#182229] !text-[#54656f] dark:!text-[#ffd279] text-center !text-[12px] leading-snug max-w-sm flex items-start gap-1.5">
+              <Lock className="w-3 h-3 mt-[3px] flex-shrink-0" />
+              <span>Messages and calls are end-to-end encrypted. Only you two can read them.</span>
+            </p>
+          </div>
         )}
 
         {!isLoadingMessages && messages.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="h-full flex flex-col items-center justify-center text-center px-6"
-          >
-            <div className="text-6xl animate-heartbeat mb-3">💌</div>
-            <p className="font-serif italic text-2xl text-stone-700 dark:text-stone-200">Say something sweet</p>
-            <p className="text-xs text-stone-500 mt-1 mb-4">Only you two can ever read this chat</p>
+          <div className="flex flex-col items-center text-center px-6 mt-10">
+            <p className="text-[#54656f] dark:text-[#8696a0] text-sm mb-3">Say hi to {partnerDisplayName} 👋</p>
             <div className="flex flex-wrap justify-center gap-2">
               {['Good morning ☀️', 'I miss you 🥺', 'Love you 💗'].map((t) => (
-                <button key={t} type="button" onClick={() => setInputContent(t)} className="glass rounded-full px-3.5 py-1.5 text-sm text-stone-700 dark:text-stone-200 active:scale-95 transition-transform">
+                <button key={t} type="button" onClick={() => setInputContent(t)} className="wa-pill !text-[14px] !text-[#111b21] dark:!text-[#e9edef] active:scale-95 transition-transform">
                   {t}
                 </button>
               ))}
             </div>
-          </motion.div>
+          </div>
         )}
 
         {messages.map((msg, idx) => {
@@ -689,8 +665,8 @@ const ChatPage: React.FC = () => {
           return (
             <React.Fragment key={msg.local_uuid || msg.id}>
               {showDateSeparator && (
-                <div className="flex justify-center mt-5 mb-2 sticky top-1 z-10">
-                  <span className="glass px-3 py-1 rounded-full text-[11px] font-semibold text-stone-500 dark:text-stone-300">
+                <div className="flex justify-center mt-3 mb-1.5 sticky top-1.5 z-10">
+                  <span className="wa-pill uppercase !text-[12px]">
                     {formatDateSeparator(msg.created_at)}
                   </span>
                 </div>
@@ -715,15 +691,15 @@ const ChatPage: React.FC = () => {
         <AnimatePresence>
           {partnerPresence.typing && (
             <motion.div
-              initial={{ opacity: 0, y: 10, scale: 0.8 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 26 }}
-              className="glass mt-3 mr-auto w-fit rounded-[1.35rem] rounded-bl-md px-4 py-3 flex gap-1"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="wa-bubble wa-in wa-tail mt-2.5 ml-2 mr-auto w-fit !px-4 !py-3 flex gap-1"
               aria-label={`${partnerDisplayName} is typing`}
             >
               {[0, 1, 2].map((i) => (
-                <span key={i} className="typing-dot w-2 h-2 rounded-full bg-[#E05A74]/70" style={{ animationDelay: `${i * 0.15}s` }} />
+                <span key={i} className="typing-dot w-2 h-2 rounded-full bg-[#8696a0]" style={{ animationDelay: `${i * 0.15}s` }} />
               ))}
             </motion.div>
           )}
@@ -736,212 +712,212 @@ const ChatPage: React.FC = () => {
       {showScrollBottomBtn && (
         <button
           onClick={scrollToBottom}
-          className="glass absolute bottom-24 right-4 z-30 p-2.5 rounded-full text-[#E05A74] active:scale-90 hover:scale-105 transition-transform"
+          className="absolute bottom-20 right-3 z-30 w-10 h-10 rounded-full bg-white dark:bg-[#202c33] text-[#54656f] dark:text-[#aebac1] shadow-[0_1px_3px_rgba(11,20,26,0.3)] flex items-center justify-center active:scale-90 transition-transform"
           title="Scroll to latest message"
+          aria-label="Scroll to latest message"
         >
-          <ChevronDown className="w-5 h-5" />
+          <ChevronDown className="w-6 h-6" />
         </button>
       )}
 
-      {/* Animated Reply Composer Banner */}
-      <AnimatePresence>
-        {activeReplyTarget && !isRecordingVoice && (
-          <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.98 }}
-            transition={{ duration: 0.2 }}
-            className="glass mx-3 mb-1 rounded-2xl px-4 py-2 flex items-center justify-between z-20 flex-shrink-0"
-          >
-            <div className="border-l-2 border-[#C95565] pl-3 text-xs flex-1 min-w-0 pr-2">
-              <span className="font-bold text-[#C95565] flex items-center gap-1">
-                {getReplyIcon(activeReplyTarget.message_type)}
-                <span>
-                  Replying to {activeReplyTarget.sender_id === currentUser?.id ? 'Yourself' : partnerDisplayName}
-                </span>
-              </span>
-              <p className="text-stone-600 dark:text-stone-300 truncate max-w-sm mt-0.5 text-xs">
-                {activeReplyTarget.deleted ? 'This message was deleted.' : activeReplyTarget.content}
-              </p>
-            </div>
-            <button
-              onClick={() => setActiveReplyTarget(null)}
-              className="p-1 rounded-full text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 active-scale"
-              title="Cancel Reply (Esc)"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Message Input / Voice Note Recorder Footer */}
-      <footer className="z-30 w-full px-2 sm:px-4 pt-1 pb-[max(env(safe-area-inset-bottom),0.6rem)] flex-shrink-0">
-        {isRecordingVoice ? (
-          /* Live Voice Note Recording Bar */
-          <div className="glass flex items-center justify-between gap-3 max-w-3xl mx-auto rounded-[1.75rem] p-1.5">
-            <button
-              type="button"
-              onClick={cancelRecording}
-              className="p-2.5 rounded-full bg-rose-100 text-[#C95565] hover:bg-rose-200 active-scale"
-              title="Discard Recording"
-            >
-              <Trash2 className="w-5 h-5" />
-            </button>
-
-            <div className="flex-1 flex items-center justify-center gap-3 bg-stone-100 dark:bg-stone-800/80 py-1.5 px-4 rounded-full">
-              <span className="w-3 h-3 rounded-full bg-red-500 animate-ping flex-shrink-0" />
-              <span className="text-xs font-bold text-red-500 font-mono">
-                {formatTimer(recordingSeconds)}
-              </span>
-
-              {/* Frequency Waveform Animation */}
-              <div className="flex items-center gap-0.5 h-4 flex-1 justify-center max-w-[120px]">
-                {[30, 60, 40, 90, 70, 50, 80, 40, 60, 100, 50, 30].map((h, i) => {
-                  const dynamicH = Math.min(100, Math.max(20, h * (audioLevel / 40)));
-                  return (
-                    <div
-                      key={i}
-                      className="w-1 rounded-full bg-[#C95565] transition-all duration-75"
-                      style={{ height: isRecordingPaused ? '30%' : `${dynamicH}%` }}
-                    />
-                  );
-                })}
-              </div>
-
-              <button
-                type="button"
-                onClick={isRecordingPaused ? resumeRecording : pauseRecording}
-                className="p-1.5 rounded-full text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 active-scale"
-                title={isRecordingPaused ? 'Resume Recording' : 'Pause Recording'}
+      {/* Composer */}
+      <footer className="z-30 w-full px-1.5 sm:px-4 pt-1 pb-[max(env(safe-area-inset-bottom),6px)] flex-shrink-0">
+        <div className="relative flex items-end gap-1.5 max-w-4xl mx-auto">
+          {/* Attach sheet: WhatsApp-style colourful circles */}
+          <AnimatePresence>
+            {isAttachMenuOpen && !isRecordingVoice && (
+              <motion.div
+                initial={{ opacity: 0, y: 16, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.96 }}
+                transition={{ duration: 0.16, ease: 'easeOut' }}
+                className="absolute bottom-full left-0 right-14 mb-2 rounded-2xl bg-white dark:bg-[#233138] shadow-[0_2px_12px_rgba(11,20,26,0.18)] p-5 grid grid-cols-3 gap-y-4 z-40"
               >
-                {isRecordingPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-              </button>
-            </div>
+                {[
+                  { label: 'Document', icon: FileText, color: 'bg-[#7f66ff]', onClick: () => documentInputRef.current?.click() },
+                  { label: 'Camera', icon: Camera, color: 'bg-[#ff2e74]', onClick: () => cameraInputRef.current?.click() },
+                  { label: 'Gallery', icon: ImageIcon, color: 'bg-[#c861f9]', onClick: () => galleryInputRef.current?.click() },
+                ].map(({ label, icon: Icon, color, onClick }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => {
+                      setIsAttachMenuOpen(false);
+                      onClick();
+                    }}
+                    className="flex flex-col items-center gap-1.5 text-[13px] text-[#54656f] dark:text-[#d1d7db]"
+                  >
+                    <span className={`w-[52px] h-[52px] rounded-full ${color} text-white flex items-center justify-center active:scale-90 transition-transform`}>
+                      <Icon className="w-6 h-6" />
+                    </span>
+                    {label}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-            <button
-              type="button"
-              onClick={stopAndSendVoiceNote}
-              className="w-10 h-10 rounded-full bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-soft active-scale hover:bg-[#B34757]"
-              title="Send Voice Note"
-            >
-              <Send className="w-4 h-4 ml-0.5" />
-            </button>
-          </div>
-        ) : (
-          /* Standard Input Bar */
-          <form onSubmit={handleSend} className="glass relative flex items-center gap-1.5 max-w-3xl mx-auto rounded-[1.75rem] p-1.5">
-            {/* Attach menu: photos, camera, file */}
-            <button
-              type="button"
-              onClick={() => setIsAttachMenuOpen((open) => !open)}
-              className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300 ${
-                isAttachMenuOpen ? 'bg-[#E05A74] text-white rotate-45' : 'bg-rose-50 dark:bg-white/5 text-[#E05A74] hover:bg-rose-100'
-              }`}
-              title="Attach"
-              aria-label="Attach"
-              aria-expanded={isAttachMenuOpen}
-            >
-              <Plus className="w-5 h-5" />
-            </button>
-            <AnimatePresence>
-              {isAttachMenuOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10, scale: 0.9 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.9 }}
-                  transition={{ type: 'spring', stiffness: 420, damping: 30 }}
-                  className="glass absolute bottom-full left-0 mb-2 rounded-2xl p-1.5 flex flex-col gap-0.5 min-w-[11rem] z-40"
-                >
-                  {[
-                    { label: 'Photos & videos', icon: ImageIcon, title: 'Attach Images or Videos', onClick: () => galleryInputRef.current?.click() },
-                    { label: 'Camera', icon: Camera, title: 'Take Photo or Video', onClick: () => cameraInputRef.current?.click() },
-                    { label: 'File', icon: Paperclip, title: 'Attach Document or File', onClick: () => documentInputRef.current?.click() },
-                  ].map(({ label, icon: Icon, title, onClick }, i) => (
-                    <motion.button
-                      key={label}
-                      type="button"
-                      title={title}
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.04 }}
-                      onClick={() => {
-                        setIsAttachMenuOpen(false);
-                        onClick();
-                      }}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-stone-700 dark:text-stone-200 hover:bg-rose-50 dark:hover:bg-white/5"
-                    >
-                      <span className="w-8 h-8 rounded-full btn-gloss flex items-center justify-center"><Icon className="w-4 h-4" /></span>
-                      {label}
-                    </motion.button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <div className="flex-1 relative flex items-center">
-              <input
-                ref={inputRef}
-                type="text"
-                value={inputContent}
-                onChange={(e) => {
-                  setInputContent(e.target.value);
-                  triggerTyping();
-                }}
-                onFocus={() => setIsAttachMenuOpen(false)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
+          <div className="wa-input flex-1 min-w-0 rounded-[24px] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] overflow-hidden">
+            {/* Reply / edit preview inside the box, like WhatsApp */}
+            {(activeReplyTarget || editingMessage) && !isRecordingVoice && (
+              <div className="m-1.5 mb-0 rounded-[10px] bg-black/[0.05] dark:bg-black/20 border-l-4 border-[#E05A74] pl-2.5 pr-1 py-1.5 flex items-start gap-2">
+                <div className="flex-1 min-w-0 text-[13px]">
+                  <p className="font-medium text-[#E05A74] flex items-center gap-1">
+                    {editingMessage ? (
+                      'Edit message'
+                    ) : (
+                      <>
+                        {getReplyIcon(activeReplyTarget!.message_type)}
+                        {activeReplyTarget!.sender_id === currentUser?.id ? 'You' : partnerDisplayName}
+                      </>
+                    )}
+                  </p>
+                  <p className="text-[#667781] dark:text-[#8696a0] truncate">
+                    {editingMessage
+                      ? editingMessage.content
+                      : activeReplyTarget!.deleted
+                      ? 'This message was deleted.'
+                      : activeReplyTarget!.content}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
                     setActiveReplyTarget(null);
-                    setEditingMessage(null);
-                  }
-                }}
-                placeholder={
-                  editingMessage
-                    ? 'Edit message...'
-                    : activeReplyTarget
-                    ? 'Type your reply...'
-                    : 'Type a message...'
-                }
-                className="w-full bg-transparent text-stone-900 dark:text-stone-100 text-[15px] pl-2 pr-9 py-2 focus:outline-none placeholder:text-stone-400"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedMessage(null);
-                  setIsEmojiPickerOpen((prev) => !prev);
-                }}
-                className="absolute right-1 p-1 text-stone-400 hover:text-[#E05A74] transition-colors"
-                title="Emoji Picker"
-              >
-                <Smile className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* One button: mic when empty, glossy send while typing (switches instantly) */}
-            <motion.button
-              type={inputContent.trim() ? 'submit' : 'button'}
-              onClick={inputContent.trim() ? undefined : startRecording}
-              whileTap={{ scale: 0.85 }}
-              className={`relative w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden transition-colors duration-200 ${
-                inputContent.trim() ? 'btn-gloss' : 'bg-rose-50 dark:bg-white/5 text-[#E05A74] hover:bg-rose-100'
-              }`}
-              title={inputContent.trim() ? 'Send' : 'Record Voice Note'}
-            >
-              <AnimatePresence initial={false}>
-                <motion.span
-                  key={inputContent.trim() ? 'send' : 'mic'}
-                  className="absolute inset-0 flex items-center justify-center"
-                  initial={{ scale: 0.3, rotate: -90, opacity: 0 }}
-                  animate={{ scale: 1, rotate: 0, opacity: 1 }}
-                  exit={{ scale: 0.3, rotate: 90, opacity: 0 }}
-                  transition={{ duration: 0.18 }}
+                    if (editingMessage) {
+                      setEditingMessage(null);
+                      setInputContent('');
+                    }
+                  }}
+                  className="p-1 rounded-full text-[#8696a0] hover:bg-black/5"
+                  title="Cancel (Esc)"
+                  aria-label="Cancel"
                 >
-                  {inputContent.trim() ? <Send className="w-4 h-4 ml-0.5" /> : <Mic className="w-5 h-5" />}
-                </motion.span>
-              </AnimatePresence>
-            </motion.button>
-          </form>
-        )}
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {isRecordingVoice ? (
+              /* Live voice note recording */
+              <div className="flex items-center gap-2 h-12 pl-2 pr-3">
+                <button
+                  type="button"
+                  onClick={cancelRecording}
+                  className="p-2 rounded-full text-[#8696a0] hover:text-rose-500"
+                  title="Discard recording"
+                  aria-label="Discard recording"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+                <span className={`w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0 ${isRecordingPaused ? '' : 'animate-pulse'}`} />
+                <span className="text-[15px] tabular-nums text-[#54656f] dark:text-[#d1d7db] w-11">{formatTimer(recordingSeconds)}</span>
+                <div className="flex items-center gap-[3px] h-5 flex-1 justify-center overflow-hidden">
+                  {[30, 60, 40, 90, 70, 50, 80, 40, 60, 100, 50, 30, 70, 45, 85, 55].map((h, i) => {
+                    const dynamicH = Math.min(100, Math.max(15, h * (audioLevel / 40)));
+                    return (
+                      <div
+                        key={i}
+                        className="w-[3px] rounded-full bg-[#8696a0] transition-all duration-75"
+                        style={{ height: isRecordingPaused ? '20%' : `${dynamicH}%` }}
+                      />
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  onClick={isRecordingPaused ? resumeRecording : pauseRecording}
+                  className="p-1.5 rounded-full text-[#ff3b30]"
+                  title={isRecordingPaused ? 'Resume recording' : 'Pause recording'}
+                  aria-label={isRecordingPaused ? 'Resume recording' : 'Pause recording'}
+                >
+                  {isRecordingPaused ? <Mic className="w-5 h-5" /> : <Pause className="w-5 h-5" />}
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSend} className="flex items-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedMessage(null);
+                    setIsEmojiPickerOpen((prev) => !prev);
+                  }}
+                  className="p-3 text-[#8696a0] hover:text-[#54656f] flex-shrink-0"
+                  title="Emoji"
+                  aria-label="Emoji"
+                >
+                  <Smile className="w-6 h-6" />
+                </button>
+                <textarea
+                  ref={inputRef}
+                  rows={1}
+                  value={inputContent}
+                  onChange={(e) => {
+                    setInputContent(e.target.value);
+                    triggerTyping();
+                  }}
+                  onFocus={() => setIsAttachMenuOpen(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setActiveReplyTarget(null);
+                      setEditingMessage(null);
+                    }
+                    // Computers: Enter sends, Shift+Enter is a new line. Phones: Enter is a new line.
+                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia('(pointer: fine)').matches) {
+                      e.preventDefault();
+                      void handleSend(e);
+                    }
+                  }}
+                  placeholder="Message"
+                  className="flex-1 min-w-0 bg-transparent resize-none text-[16px] leading-[22px] py-[13px] max-h-[142px] focus:outline-none placeholder:text-[#8696a0] text-[#111b21] dark:text-[#e9edef]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsAttachMenuOpen((open) => !open)}
+                  className={`p-3 pr-2 flex-shrink-0 transition-colors ${isAttachMenuOpen ? 'text-[#E05A74]' : 'text-[#8696a0] hover:text-[#54656f]'}`}
+                  title="Attach"
+                  aria-label="Attach"
+                  aria-expanded={isAttachMenuOpen}
+                >
+                  <Paperclip className="w-[22px] h-[22px] -rotate-45" />
+                </button>
+                {!hasText && !editingMessage && (
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="p-3 pl-2 text-[#8696a0] hover:text-[#54656f] flex-shrink-0"
+                    title="Camera"
+                    aria-label="Camera"
+                  >
+                    <Camera className="w-[22px] h-[22px]" />
+                  </button>
+                )}
+              </form>
+            )}
+          </div>
+
+          {/* One round button: mic when empty, send while typing or recording */}
+          <motion.button
+            type="button"
+            onClick={(e) => {
+              if (isRecordingVoice) void stopAndSendVoiceNote();
+              else if (hasText) void handleSend(e);
+              else void startRecording();
+            }}
+            // keep the keyboard open after sending, like WhatsApp
+            onMouseDown={(e) => hasText && e.preventDefault()}
+            whileTap={{ scale: 0.9 }}
+            className="w-12 h-12 rounded-full bg-[#E05A74] hover:bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-[0_1px_3px_rgba(11,20,26,0.25)]"
+            title={isRecordingVoice ? 'Send voice note' : hasText ? 'Send' : 'Record voice note'}
+            aria-label={isRecordingVoice ? 'Send voice note' : hasText ? 'Send' : 'Record voice note'}
+          >
+            {isRecordingVoice || hasText ? (
+              editingMessage ? <Check className="w-6 h-6" /> : <SendHorizontal className="w-[22px] h-[22px] ml-0.5" />
+            ) : (
+              <Mic className="w-6 h-6" />
+            )}
+          </motion.button>
+        </div>
       </footer>
 
       {/* Action Modals */}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Check,
@@ -24,6 +24,7 @@ import {
   FileArchive,
   File,
   Download,
+  ChevronDown,
 } from 'lucide-react';
 import type { Message } from '../../types';
 import { formatMessageTime } from '../../utils/date';
@@ -54,6 +55,42 @@ function isEmojiOnly(text: string): boolean {
   return Boolean(emoji && emoji.length <= 3 && trimmed.replace(/\p{Extended_Pictographic}|\u200d|\ufe0f|\s/gu, '') === '');
 }
 
+
+const LONG_PRESS_MS = 450;
+
+/** Press and hold (touch) opens the menu; moving the finger (scrolling, swiping) cancels it. */
+function useLongPress(onLongPress: () => void) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const start = useRef<{ x: number; y: number } | null>(null);
+
+  const cancel = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    start.current = null;
+  };
+
+  return {
+    cancel,
+    handlers: {
+      onPointerDown: (e: React.PointerEvent) => {
+        if (e.pointerType === 'mouse') return; // desktop uses right-click or the hover arrow
+        start.current = { x: e.clientX, y: e.clientY };
+        timer.current = setTimeout(() => {
+          timer.current = null;
+          navigator.vibrate?.(25);
+          onLongPress();
+        }, LONG_PRESS_MS);
+      },
+      onPointerMove: (e: React.PointerEvent) => {
+        if (start.current && Math.hypot(e.clientX - start.current.x, e.clientY - start.current.y) > 10) cancel();
+      },
+      onPointerUp: cancel,
+      onPointerCancel: cancel,
+      onPointerLeave: cancel,
+    },
+  };
+}
+
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
   onLongPress,
@@ -63,7 +100,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   onRetry,
   onJumpToOriginal,
   isFirstInGroup = true,
-  isLastInGroup = true,
 }) => {
   const currentUser = useAuthStore((state) => state.user);
   const isMine = currentUser ? isMessageFromUser(message, currentUser.id) : false;
@@ -93,6 +129,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const hasUserReacted = Boolean(
     currentUser && message.reactions?.some((r) => r.profile_id === currentUser.id)
   );
+  const longPress = useLongPress(() => onLongPress(message));
 
   const getReplyIcon = (type?: string) => {
     if (type === 'voice') return <Mic className="w-3 h-3 text-[#C95565]" />;
@@ -107,7 +144,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     if (message.status === 'Sending' || message.status === 'Queued') {
       return (
         <span title="Sending...">
-          <Clock className={`w-3 h-3 animate-pulse ${bigEmoji ? 'text-stone-400' : 'text-white/80'}`} />
+          <Clock className="w-3 h-3 text-[#8696a0]" />
         </span>
       );
     }
@@ -115,14 +152,14 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     if (message.status === 'Sent') {
       return (
         <motion.span title="Sent" initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
-          <Check className={`w-3.5 h-3.5 ${bigEmoji ? 'text-stone-400' : 'text-white/80'}`} strokeWidth={2.5} />
+          <Check className="w-4 h-4 text-[#8696a0]" strokeWidth={2.2} />
         </motion.span>
       );
     }
     if (message.status === 'Delivered') {
       return (
         <motion.span title="Delivered" initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
-          <CheckCheck className={`w-3.5 h-3.5 ${bigEmoji ? 'text-stone-400' : 'text-white/80'}`} strokeWidth={2.5} />
+          <CheckCheck className="w-4 h-4 text-[#8696a0]" strokeWidth={2.2} />
         </motion.span>
       );
     }
@@ -133,7 +170,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             e.stopPropagation();
             if (onRetry) onRetry(message);
           }}
-          className={`flex items-center gap-1 font-bold hover:underline ${bigEmoji ? 'text-rose-500' : 'text-white'}`}
+          className="flex items-center gap-1 font-semibold text-rose-500 hover:underline"
           title="Failed to send. Tap to retry."
         >
           <AlertCircle className="w-3.5 h-3.5" />
@@ -143,7 +180,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     }
     return (
       <motion.span title="Read" initial={{ scale: 0.4 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 400, damping: 15 }}>
-        <CheckCheck className="w-3.5 h-3.5 text-[#53BDEB] drop-shadow-[0_0_1px_rgba(0,0,0,0.35)]" strokeWidth={2.75} />
+        <CheckCheck className="w-4 h-4 text-[#53bdeb]" strokeWidth={2.2} />
       </motion.span>
     );
   };
@@ -178,7 +215,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         initial={isFresh ? { opacity: 0, scale: 0.9 } : false}
         animate={{ opacity: 1, scale: 1 }}
       >
-        <div className={`glass flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-full text-[11px] font-semibold ${
+        <div className={`wa-pill flex items-center gap-2 !text-[12.5px] ${
           isMissed
             ? 'text-rose-600 dark:text-rose-300'
             : isDeclined || isBusy
@@ -219,17 +256,31 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   }
 
   const fileCategory = getFileCategory(message.content);
+  const isMedia = (isImageMsg || isVideoMsg) && !message.deleted && Boolean(message.content);
+  const isPlainText = !isMedia && !isVoiceNote && !isDocumentMsg && !bigEmoji;
+
+  const meta = (
+    <>
+      {message.edited && <span>edited</span>}
+      <span>{formatMessageTime(message.created_at)}</span>
+      {renderStatus()}
+    </>
+  );
 
   return (
     <motion.div
       id={`msg-${message.local_uuid}`}
-      initial={isFresh ? { opacity: 0, x: isMine ? 28 : -28, y: 8, scale: 0.85 } : false}
-      animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
-      transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+      initial={isFresh ? { opacity: 0, y: 6 } : false}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.18, ease: 'easeOut' }}
       drag={onSwipeToReply ? 'x' : false}
-      dragConstraints={{ left: 0, right: 60 }}
+      dragConstraints={{ left: 0, right: 0 }}
+      dragElastic={{ left: 0, right: 0.5 }}
+      dragSnapToOrigin
+      onDragStart={longPress.cancel}
       onDragEnd={(_, info) => {
         if (info.offset.x > 40 && onSwipeToReply) {
+          navigator.vibrate?.(10);
           onSwipeToReply(message);
         }
       }}
@@ -237,31 +288,42 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         e.preventDefault();
         onLongPress(message);
       }}
-      className={`flex flex-col relative max-w-[82%] sm:max-w-[70%] ${
-        isMine ? 'ml-auto items-end' : 'mr-auto items-start'
-      } ${isFirstInGroup ? 'mt-3' : 'mt-0.5'} ${hasReactions ? 'mb-4' : ''}`}
+      className={`group flex flex-col relative max-w-[80%] sm:max-w-[65%] ${
+        isMine ? 'ml-auto items-end mr-2' : 'mr-auto items-start ml-2'
+      } ${isFirstInGroup ? 'mt-2.5' : 'mt-[3px]'} ${hasReactions ? 'mb-4' : ''}`}
     >
-      {/* Pinned / Starred Badge */}
-      {(message.pinned || message.starred) && (
-        <div className="flex items-center gap-1 text-[10px] text-stone-400 dark:text-stone-500 mb-0.5 px-1">
-          {message.pinned && <Pin className="w-3 h-3 text-[#C95565]" />}
-          {message.starred && <Star className="w-3 h-3 text-amber-500 fill-amber-500" />}
-        </div>
-      )}
-
-      {/* Main Bubble Container */}
+      {/* Main Bubble Container: press and hold for the menu, like WhatsApp */}
       <div
-        onClick={() => onLongPress(message)}
-        className={`relative text-[15px] leading-snug transition-transform duration-200 cursor-pointer active:scale-[0.98] select-none ${
-          bigEmoji
-            ? 'px-1 py-0'
-            : `px-3.5 py-2 rounded-[1.35rem] ${
-                isMine
-                  ? `bubble-mine ${isFirstInGroup ? '' : 'rounded-tr-md'} ${isLastInGroup ? 'rounded-br-md' : 'rounded-br-md'}`
-                  : `glass text-stone-800 dark:text-stone-100 ${isFirstInGroup ? '' : 'rounded-tl-md'} ${isLastInGroup ? 'rounded-bl-md' : 'rounded-bl-md'}`
-              }`
+        {...longPress.handlers}
+        className={`select-none [-webkit-touch-callout:none] ${
+          bigEmoji ? 'relative px-1' : `wa-bubble ${isMine ? 'wa-out' : 'wa-in'} ${isFirstInGroup ? 'wa-tail' : ''} ${isMedia ? '!p-[3px]' : ''}`
         } ${message.deleted ? 'italic opacity-70' : ''}`}
       >
+        {/* Desktop: menu arrow on hover */}
+        {!bigEmoji && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onLongPress(message);
+            }}
+            className={`hidden [@media(hover:hover)]:flex absolute top-0.5 right-0.5 z-10 w-6 h-6 items-center justify-center rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-[#8696a0] ${
+              isMine ? 'bg-[#ffe1e8] dark:bg-[#6b2a3d]' : 'bg-white dark:bg-[#202c33]'
+            }`}
+            aria-label="Message options"
+          >
+            <ChevronDown className="w-4 h-4" />
+          </button>
+        )}
+
+        {/* Pinned / Starred */}
+        {(message.pinned || message.starred) && (
+          <div className="flex items-center gap-1 text-[11px] text-[#667781] dark:text-[#8696a0] mb-0.5">
+            {message.pinned && <Pin className="w-3 h-3" />}
+            {message.starred && <Star className="w-3 h-3 fill-current" />}
+          </div>
+        )}
+
         {/* Reply Reference Preview Card */}
         {message.reply_to_msg && !message.deleted && (
           <div
@@ -271,18 +333,14 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 onJumpToOriginal(message.reply_to);
               }
             }}
-            className={`mb-1.5 px-2.5 py-1.5 rounded-xl text-xs border-l-[3px] cursor-pointer transition-opacity hover:opacity-80 ${
-              isMine
-                ? 'bg-white/25 border-white/80'
-                : 'bg-rose-50/80 dark:bg-white/5 border-[#E05A74]'
-            }`}
+            className={`mb-1 px-2.5 py-1.5 rounded-md text-xs border-l-4 border-[#E05A74] bg-black/[0.05] dark:bg-white/5 cursor-pointer hover:opacity-80 ${isMedia ? 'm-[3px]' : ''}`}
             title="Tap to jump to original message"
           >
-            <p className={`font-bold text-[11px] flex items-center gap-1 ${isMine ? 'text-white' : 'text-[#C95565]'}`}>
+            <p className="font-semibold text-[12.5px] text-[#E05A74] flex items-center gap-1">
               {getReplyIcon(message.reply_to_msg.message_type)}
               <span>{message.reply_to_msg.sender_name}</span>
             </p>
-            <p className={`truncate text-[11px] mt-0.5 ${isMine ? 'text-white/85' : 'text-stone-600 dark:text-stone-300'}`}>
+            <p className="truncate text-[13px] text-[#667781] dark:text-[#8696a0]">
               {message.reply_to_msg.content}
             </p>
           </div>
@@ -290,7 +348,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         {/* Big encrypted file still downloading */}
         {!message.content && !message.deleted ? (
-          <div className="flex items-center gap-2 py-1 pr-1 text-xs opacity-90">
+          <div className="flex items-center gap-2 py-1 pr-1 text-[13px] text-[#667781] dark:text-[#8696a0]">
             <span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
             {isImageMsg ? 'Loading photo…' : isVideoMsg ? 'Loading video…' : isVoiceNote ? 'Loading voice note…' : 'Loading file…'}
           </div>
@@ -300,24 +358,20 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               e.stopPropagation();
               if (onMediaClick) onMediaClick(message);
             }}
-            className="my-1 p-2.5 rounded-2xl bg-white/70 dark:bg-stone-800/70 border border-stone-200/60 dark:border-stone-700/60 flex items-center gap-3 max-w-xs shadow-xs cursor-pointer hover:opacity-90 active-scale"
+            className="mt-0.5 p-2.5 rounded-md bg-black/[0.05] dark:bg-white/5 flex items-center gap-3 w-64 max-w-full cursor-pointer"
           >
-            <div className="p-2 rounded-xl bg-stone-100 dark:bg-stone-700/60 flex-shrink-0">
-              {getDocIcon(fileCategory)}
-            </div>
+            <div className="flex-shrink-0">{getDocIcon(fileCategory)}</div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">
-                Document Attachment
-              </p>
-              <p className="text-[10px] text-stone-500 dark:text-stone-400 font-semibold uppercase mt-0.5">
-                {getFileExtensionLabel(message.content)} File
+              <p className="text-[14px] text-[#111b21] dark:text-[#e9edef] truncate">Document</p>
+              <p className="text-[11px] text-[#667781] dark:text-[#8696a0] uppercase">
+                {getFileExtensionLabel(message.content)}
               </p>
             </div>
             <a
               href={message.content}
               download="attachment"
               onClick={(e) => e.stopPropagation()}
-              className="p-1.5 rounded-full bg-stone-100 dark:bg-stone-700 text-stone-600 dark:text-stone-300 hover:text-[#C95565]"
+              className="w-8 h-8 rounded-full border border-[#8696a0]/50 text-[#8696a0] flex items-center justify-center"
               title="Download File"
             >
               <Download className="w-4 h-4" />
@@ -330,21 +384,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               e.stopPropagation();
               if (onMediaClick) onMediaClick(message);
             }}
-            className="my-1 rounded-2xl overflow-hidden shadow-soft cursor-pointer transition-transform hover:scale-[1.01] active-scale group relative max-w-xs bg-black"
+            className="rounded-[5px] overflow-hidden cursor-pointer relative w-64 max-w-full bg-black"
           >
-            <video
-              src={message.content}
-              className="w-full h-auto max-h-60 object-cover rounded-2xl opacity-90 group-hover:opacity-100 transition-opacity"
-              preload="metadata"
-            />
+            <video src={message.content} className="w-full h-auto max-h-80 object-cover" preload="metadata" />
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-sm text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+              <div className="w-12 h-12 rounded-full bg-black/45 text-white flex items-center justify-center">
                 <Play className="w-6 h-6 fill-white ml-0.5" />
               </div>
-            </div>
-            <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/60 rounded-md text-[10px] text-white font-bold backdrop-blur-xs flex items-center gap-1">
-              <Video className="w-3 h-3 text-[#C95565]" />
-              <span>Video</span>
             </div>
           </div>
         ) : isImageMsg && !message.deleted ? (
@@ -354,47 +400,42 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               e.stopPropagation();
               if (onMediaClick) onMediaClick(message);
             }}
-            className="my-1 rounded-2xl overflow-hidden shadow-soft cursor-pointer transition-transform hover:scale-[1.01] active-scale group relative max-w-xs"
+            className="rounded-[5px] overflow-hidden cursor-pointer relative w-64 max-w-full"
           >
-            <img
-              src={message.content}
-              alt="Shared image"
-              className="w-full h-auto max-h-60 object-cover rounded-2xl"
-              loading="lazy"
-            />
-            <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-              <span className="text-white text-xs font-semibold px-2 py-1 bg-black/40 rounded-full backdrop-blur-sm">
-                Tap to expand
-              </span>
-            </div>
+            <img src={message.content} alt="Shared image" className="w-full h-auto max-h-80 object-cover" loading="lazy" draggable={false} />
           </div>
         ) : isVoiceNote && !message.deleted ? (
           /* Voice Note Audio Player */
-          <div className="py-1">
+          <div className="pt-0.5 pb-3 w-64 max-w-full">
             <AudioPlayer id={message.local_uuid} src={message.content} />
           </div>
+        ) : bigEmoji ? (
+          <motion.p
+            className="text-5xl leading-none py-1"
+            initial={isFresh ? { scale: 0.3 } : false}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 14 }}
+          >
+            {message.content}
+          </motion.p>
         ) : (
-          bigEmoji ? (
-            <motion.p
-              className="text-5xl leading-none py-1"
-              initial={isFresh ? { scale: 0.3, rotate: -15 } : false}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 12 }}
-            >
-              {message.content}
-            </motion.p>
-          ) : (
-            /* Text Content */
-            <p className="whitespace-pre-wrap break-words">{message.content}</p>
-          )
+          /* Text Content (the invisible spacer keeps the time from overlapping the last line) */
+          <span className="whitespace-pre-wrap break-words">
+            {message.content}
+            <span className={`inline-block ${isMine ? 'w-[70px]' : 'w-[50px]'} ${message.edited ? 'pl-10' : ''}`} aria-hidden />
+          </span>
         )}
 
-        {/* Timestamp & Status Footer */}
-        <div className={`flex items-center justify-end gap-1 text-[10px] mt-0.5 -mb-0.5 ${isMine && !bigEmoji ? 'text-white/80' : 'text-stone-400 dark:text-stone-400'}`}>
-          {message.edited && <span>(edited)</span>}
-          <span>{formatMessageTime(message.created_at)}</span>
-          {renderStatus()}
-        </div>
+        {/* Timestamp & Status */}
+        {isMedia ? (
+          <div className="absolute bottom-2 right-2.5 flex items-center gap-1 text-[11px] text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.6)] [&_svg]:!text-white">
+            {meta}
+          </div>
+        ) : bigEmoji ? (
+          <div className={`wa-pill wa-meta !px-1.5 !py-0.5 flex items-center gap-1 mt-0.5 w-fit ${isMine ? 'ml-auto' : ''}`}>{meta}</div>
+        ) : (
+          <div className={`wa-meta flex items-center gap-1 ${isPlainText ? 'absolute bottom-1 right-2' : 'justify-end -mt-3'}`}>{meta}</div>
+        )}
 
         {/* Reactions Pill Badge */}
         {hasReactions && (
@@ -403,10 +444,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               e.stopPropagation();
               if (onReactionClick) onReactionClick(message);
             }}
-            className={`glass absolute -bottom-3.5 ${
+            className={`absolute -bottom-4 ${
               isMine ? 'right-2' : 'left-2'
-            } flex items-center gap-1 px-2 py-0.5 rounded-full text-xs cursor-pointer active:scale-95 z-20 ${
-              hasUserReacted ? 'ring-1 ring-[#E05A74]/50' : ''
+            } flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-sm bg-white dark:bg-[#202c33] shadow-[0_1px_3px_rgba(11,20,26,0.2)] border border-[#efeae2] dark:border-[#0b141a] cursor-pointer active:scale-95 z-20 ${
+              hasUserReacted ? 'ring-1 ring-[#53bdeb]/40' : ''
             }`}
             title="View reaction details"
           >

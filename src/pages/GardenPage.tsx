@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Droplets, Sparkles, Star, Flower2, Trophy } from 'lucide-react';
+import { Droplets, Sparkles, Star, Flower2, Trophy, Flame, Heart } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useGameStore } from '../store/useGameStore';
-import { gardenLevel, sumBy, GARDEN_LEVELS } from '../utils/scores';
+import { gardenLevel, sumBy, wateringStreak } from '../utils/scores';
+import { useCoupleStore } from '../store/useCoupleStore';
+import { usePresenceStore } from '../store/usePresenceStore';
+import { Avatar } from '../components/ui/Avatar';
 import { todayKey } from '../data/gameQuestions';
 import { cardClass } from '../components/Couple/CoupleCards';
 import { GardenScene, type Phase } from '../components/Garden/GardenScene';
@@ -28,19 +31,34 @@ const GardenPage: React.FC = () => {
   const award = useGameStore((s) => s.award);
   const builds = useGameStore((s) => s.builds);
   const justBuilt = useGameStore((s) => s.justBuilt);
+  const sendLove = useCoupleStore((s) => s.sendLove);
+  const partnerOnline = usePresenceStore((s) => s.partnerPresence.online);
   const [watering, setWatering] = useState(false);
+  // Day, sunset and night follow the real clock while the page is open
+  const [phase, setPhase] = useState<Phase>(() => phaseFor(new Date().getHours()));
   const [levelUp, setLevelUp] = useState<string | null>(null);
 
   const total = sumBy(points);
   const { current, next, progress } = gardenLevel(total);
-  const phase = phaseFor(new Date().getHours());
   const today = todayKey();
   const iWatered = points.some((p) => p.user_id === me?.id && p.ref === `garden:${today}`);
   const theyWatered = points.some((p) => p.user_id === partner.id && p.ref === `garden:${today}`);
+  const bothWatered = iWatered && theyWatered;
+  const streak = me ? wateringStreak(points, me.id, partner.id) : 0;
   const hugs = points.filter((p) => p.source === 'hug' && p.user_id === me?.id).length;
   const flowerCount = Math.min(64, Math.floor(total / 15));
   // Love coins: everything earned minus what has been built
   const coins = Math.max(0, total - builds.reduce((t, b) => t + b.cost, 0));
+
+  useEffect(() => {
+    const t = setInterval(() => setPhase(phaseFor(new Date().getHours())), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Watering on the same day: a bonus for each of you and a rainbow
+  useEffect(() => {
+    if (bothWatered) void award('garden', 5, `garden-both:${today}`);
+  }, [bothWatered, today, award]);
 
   // Celebrate reaching a new level (once per level, per device)
   useEffect(() => {
@@ -95,6 +113,7 @@ const GardenPage: React.FC = () => {
             watering={watering}
             builds={builds.map((b) => b.item)}
             justBuilt={justBuilt}
+            rainbow={bothWatered}
             label={`Garden level ${current.level}: ${current.name}`}
           />
           {/* glass sheen */}
@@ -103,6 +122,20 @@ const GardenPage: React.FC = () => {
           <div className="absolute top-3 left-3 glass rounded-full px-3.5 py-1.5 text-xs font-semibold text-stone-700 dark:text-stone-100 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-[#E05A74]" /> Level {current.level} · {current.name}
           </div>
+          {/* You two: tap to send a love tap */}
+          <button
+            onClick={() => sendLove('tap')}
+            className="absolute top-3 right-3 glass rounded-full pl-1 pr-3 py-1 flex items-center gap-1.5 text-xs font-semibold text-stone-700 dark:text-stone-100 active:scale-95 transition-transform"
+            title={`Send ${partnerName} a love tap`}
+          >
+            <span className="flex items-center -space-x-2">
+              <Avatar src={me?.avatar_url} name={me?.display_name} size="sm" className="ring-2 ring-white dark:ring-stone-900 rounded-full" />
+              <Avatar src={partner.avatar_url} name={partnerName} size="sm" isOnline={partnerOnline} className="ring-2 ring-white dark:ring-stone-900 rounded-full" />
+            </span>
+            <Heart className={`w-3.5 h-3.5 text-[#E05A74] fill-[#E05A74] ${partnerOnline ? 'animate-heartbeat' : ''}`} />
+            <span className="hidden sm:inline">{partnerOnline ? `${partnerName} is here` : 'Send a tap'}</span>
+          </button>
+
           <p className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-[11px] font-medium text-white/90 drop-shadow whitespace-nowrap">
             Tap the tree or a flower ✨
           </p>
@@ -158,7 +191,7 @@ const GardenPage: React.FC = () => {
               {[
                 { icon: Flower2, value: flowerCount, label: 'flowers' },
                 { icon: Star, value: hugs, label: 'stars' },
-                { icon: Sparkles, value: `${current.level}/${GARDEN_LEVELS.length}`, label: 'level' },
+                { icon: Flame, value: streak, label: streak === 1 ? 'day streak' : 'days streak' },
               ].map(({ icon: Icon, value, label }) => (
                 <div key={label} className="rounded-2xl bg-white/60 dark:bg-white/5 px-3 py-2.5 text-center">
                   <Icon className="w-4 h-4 mx-auto text-[#E05A74]" />
@@ -172,7 +205,10 @@ const GardenPage: React.FC = () => {
 
         <Reveal index={2}>
           <div className={`${cardClass} p-5 flex flex-col h-full`}>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-[#E05A74] mb-3">Daily care</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#E05A74] mb-1">Daily care</p>
+            <p className="text-xs text-stone-500 dark:text-stone-400 mb-3">
+              {bothWatered ? '🌈 You both watered today — rainbow unlocked!' : 'Both water today for +5 each and a rainbow 🌈'}
+            </p>
             <div className="flex flex-col gap-2 text-xs mb-4">
               {[
                 { name: 'You', done: iWatered },

@@ -114,7 +114,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ id, src, durationSecon
   const waveformHeights = [40, 80, 50, 90, 60, 30, 70, 90, 40, 60, 80, 50, 30, 70, 50, 80];
 
   return (
-    <div className="flex items-center gap-2.5 p-2 bg-white/70 dark:bg-stone-800/70 rounded-2xl w-full max-w-xs shadow-xs border border-stone-200/50 dark:border-stone-700/50">
+    <div className="flex items-center gap-2.5 w-full">
       <audio ref={audioRef} src={src} preload="auto" />
       
       <button

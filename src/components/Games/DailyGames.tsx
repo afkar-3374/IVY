@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Check, Lock, Send } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useGameStore } from '../../store/useGameStore';
-import { DAILY_QUESTIONS, KNOW_ME_QUESTIONS, WOULD_YOU_RATHER, dayIndex, pickForDay, todayKey } from '../../data/gameQuestions';
+import { DAILY_QUESTIONS, WOULD_YOU_RATHER, dayIndex, pickForDay, todayKey } from '../../data/gameQuestions';
 import { cardClass } from '../Couple/CoupleCards';
 import type { DailyGame, GameAnswer } from '../../services/gameService';
 
@@ -107,99 +107,6 @@ export const DailyQuestion: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
-  );
-};
-
-/* ── How well do you know me ── */
-export const KnowMe: React.FC = () => {
-  const { partnerName } = usePartners();
-  const submitAnswer = useGameStore((s) => s.submitAnswer);
-  const award = useGameStore((s) => s.award);
-  const today = todayKey();
-  const questions = useMemo(() => pickForDay(KNOW_ME_QUESTIONS, 3), [today]); // eslint-disable-line react-hooks/exhaustive-deps
-  const rounds = useRounds('know_me', questions.map((q) => `${today}:${q.index}`));
-  const [drafts, setDrafts] = useState<Record<string, { self?: number; guess?: number }>>({});
-
-  // Score revealed rounds: 10 points for each right guess
-  useEffect(() => {
-    rounds.forEach((r) => {
-      const mine = r.mine?.answer as { guess: number } | undefined;
-      const theirs = r.theirs?.answer as { self: number } | undefined;
-      if (mine && theirs && mine.guess === theirs.self) void award('know_me', 10, `km:${r.key}`);
-    });
-  }, [rounds.map((r) => `${r.key}${r.mine ? 1 : 0}${r.theirs ? 1 : 0}`).join()]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return (
-    <div className={`${cardClass} p-5`}>
-      <p className="text-[11px] font-bold uppercase tracking-wider text-[#E05A74] mb-1">How well do you know me?</p>
-      <p className="text-xs text-stone-500 dark:text-stone-400 mb-4">
-        Answer for yourself, then guess {partnerName}'s answer. 10 points for every right guess.
-      </p>
-      <div className="flex flex-col gap-4">
-        {questions.map(({ item }, i) => {
-          const r = rounds[i];
-          const d = drafts[r.key] || {};
-          const mine = r.mine?.answer as { self: number; guess: number } | undefined;
-          const theirs = r.theirs?.answer as { self: number; guess: number } | undefined;
-          return (
-            <div key={r.key} className="rounded-2xl bg-stone-50/80 dark:bg-stone-800/40 p-3">
-              <p className="font-semibold text-sm text-stone-800 dark:text-stone-100 mb-2">{item.q}</p>
-              {!r.loaded ? null : !mine ? (
-                <>
-                  {(['self', 'guess'] as const).map((field) => (
-                    <div key={field} className="mb-2">
-                      <p className="text-[11px] font-semibold text-stone-500 mb-1">
-                        {field === 'self' ? 'About me' : `My guess for ${partnerName}`}
-                      </p>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {item.options.map((opt, oi) => (
-                          <button
-                            key={oi}
-                            onClick={() => setDrafts((all) => ({ ...all, [r.key]: { ...d, [field]: oi } }))}
-                            className={`rounded-xl px-2 py-2 text-xs font-medium transition-all ${
-                              d[field] === oi
-                                ? 'bg-[#E05A74] text-white shadow-soft'
-                                : 'bg-white dark:bg-[#1E1D24] text-stone-700 dark:text-stone-200 border border-rose-100 dark:border-stone-700'
-                            }`}
-                          >
-                            {opt}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                  <button
-                    disabled={d.self === undefined || d.guess === undefined}
-                    onClick={async () => {
-                      await submitAnswer('know_me', r.key, { self: d.self, guess: d.guess });
-                      void award('know_me', 2, `km-play:${r.key}`);
-                    }}
-                    className="btn-gloss w-full mt-1 rounded-full py-2 text-sm font-semibold"
-                  >
-                    Lock in
-                  </button>
-                </>
-              ) : !theirs ? (
-                <div className="text-xs text-stone-600 dark:text-stone-300 space-y-1">
-                  <p>You: {item.options[mine.self]} · your guess: {item.options[mine.guess]}</p>
-                  <Waiting name={partnerName} />
-                </div>
-              ) : (
-                <div className="text-xs space-y-1">
-                  <p className={mine.guess === theirs.self ? 'text-emerald-600 font-semibold' : 'text-stone-600 dark:text-stone-300'}>
-                    {mine.guess === theirs.self ? '✓ You know them! ' : '✗ '} {partnerName}: {item.options[theirs.self]}
-                    {mine.guess !== theirs.self && ` (you guessed ${item.options[mine.guess]})`}
-                  </p>
-                  <p className={theirs.guess === mine.self ? 'text-emerald-600 font-semibold' : 'text-stone-600 dark:text-stone-300'}>
-                    {theirs.guess === mine.self ? `✓ ${partnerName} knows you!` : `✗ ${partnerName} guessed ${item.options[theirs.guess]}`} (you: {item.options[mine.self]})
-                  </p>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 };

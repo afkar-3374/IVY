@@ -1,4 +1,5 @@
 import type { PointRow, PointSource } from '../services/gameService';
+import { todayKey } from '../data/gameQuestions';
 
 const DAY_MS = 86_400_000;
 
@@ -63,11 +64,25 @@ export function coupleStreak(rows: PointRow[], me: string, partner: string, now 
   return streak;
 }
 
+/** Days in a row (ending today, or yesterday if today isn't done yet) that you both watered the garden. */
+export function wateringStreak(rows: PointRow[], me: string, partner: string, now = new Date()): number {
+  const watered = new Set(rows.filter((r) => r.ref.startsWith('garden:')).map((r) => `${r.user_id}|${r.ref}`));
+  const both = (d: Date) => watered.has(`${me}|garden:${todayKey(d)}`) && watered.has(`${partner}|garden:${todayKey(d)}`);
+  let cursor = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
+  if (!both(cursor)) cursor = new Date(cursor.getTime() - DAY_MS);
+  let streak = 0;
+  while (both(cursor)) {
+    streak += 1;
+    cursor = new Date(cursor.getTime() - DAY_MS);
+  }
+  return streak;
+}
+
 export const SOURCE_LABELS: Record<PointSource, string> = {
   tap: '💗 Love taps',
   hug: '🤗 Hugs',
   daily_question: '💭 Daily question',
-  know_me: '🧠 Know me',
+  know_me: '🧠 Know me', // retired game, kept for old points
   would_you_rather: '🤔 Would you rather',
   tic_tac_toe: '❤️ Tic-tac-toe',
   garden: '🌱 Garden care',
