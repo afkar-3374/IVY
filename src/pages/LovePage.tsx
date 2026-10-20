@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Heart } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useCoupleStore } from '../store/useCoupleStore';
+import { useGameStore } from '../store/useGameStore';
 import { coupleService, type HugSignal } from '../services/coupleService';
 import { USER_1_ID } from '../utils/constants';
 import { LoveTapCard } from '../components/Couple/CoupleCards';
@@ -79,6 +80,7 @@ const LovePage: React.FC = () => {
     setHugged(true);
     navigator.vibrate?.([100, 60, 100, 60, 300]);
     if (me?.id === USER_1_ID) void sendLove('hug');
+    void useGameStore.getState().award('hug', 5, `hug:${Date.now()}`);
   }, [progress, hugged, me?.id, sendLove]);
 
   // Ready for another hug after the celebration

@@ -37,7 +37,7 @@ export const SideNav: React.FC = () => {
             }
           >
             <Icon className="w-5 h-5" />
-            {label === 'Hug' ? 'Virtual hug' : label}
+            {label}
           </NavLink>
         ))}
       </nav>

@@ -10,6 +10,9 @@ import { SideNav } from '../components/Navigation/SideNav';
 import { UsDashboard } from '../components/Couple/CoupleCards';
 import { LoveBurstOverlay } from '../components/Couple/LoveBurstOverlay';
 import { useCoupleStore } from '../store/useCoupleStore';
+import { useGameStore } from '../store/useGameStore';
+import { WeeklyScores } from '../components/Games/WeeklyScores';
+import { PetalBackground } from '../components/Couple/PetalBackground';
 import { CallOverlay } from '../components/Call/CallOverlay';
 import { queueProcessor } from '../services/sync/queueProcessor';
 import { notificationService } from '../services/notificationService';
@@ -46,7 +49,12 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   // Couple data (start date, special dates, love taps) while unlocked
   useEffect(() => {
     if (!isUnlocked) return;
-    return useCoupleStore.getState().init();
+    const stopCouple = useCoupleStore.getState().init();
+    const stopGames = useGameStore.getState().init();
+    return () => {
+      stopCouple();
+      stopGames();
+    };
   }, [isUnlocked]);
 
   useEffect(() => {
@@ -75,6 +83,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   return (
     <div className="h-[100dvh] w-full flex bg-gradient-to-br from-[#FFF7F5] via-[#FDF2F4] to-[#F7F1FB] dark:from-[#16151A] dark:via-[#1A1620] dark:to-[#16151A] text-stone-900 dark:text-stone-100 font-sans antialiased overflow-hidden">
+      {!isChat && <PetalBackground />}
       {showNav && <SideNav />}
 
       <div className="flex-1 min-w-0 flex flex-col relative">
@@ -113,7 +122,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       {/* Desktop: "Us" panel next to the chat */}
       {showNav && isChat && (
         <aside className="hidden xl:block w-[22rem] flex-shrink-0 border-l border-rose-100/80 dark:border-stone-800 bg-white/50 dark:bg-[#1A1920]/60 overflow-y-auto p-5">
-          <UsDashboard compact />
+          <div className="flex flex-col gap-4">
+            <UsDashboard compact />
+            <WeeklyScores compact />
+          </div>
         </aside>
       )}
     </div>

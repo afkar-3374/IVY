@@ -5,6 +5,8 @@ import { logger } from '../services/logger/logger';
 import { upcomingDates } from '../utils/couple';
 import { useAuthStore } from './useAuthStore';
 import { useUIStore } from './useUIStore';
+import { useGameStore } from './useGameStore';
+import { todayKey } from '../data/gameQuestions';
 
 interface LoveBurst {
   id: string;
@@ -139,6 +141,15 @@ export const useCoupleStore = create<CoupleState>((set, get) => ({
     navigator.vibrate?.(30);
     try {
       await coupleService.sendLove(kind);
+      if (kind === 'tap') {
+        // 1 point per love tap, up to 10 a day
+        const me = useAuthStore.getState().user?.id;
+        const today = todayKey();
+        const earned = useGameStore
+          .getState()
+          .points.filter((p) => p.user_id === me && p.source === 'tap' && p.ref.startsWith(`tap:${today}:`)).length;
+        if (earned < 10) void useGameStore.getState().award('tap', 1, `tap:${today}:${earned + 1}`);
+      }
     } catch (err) {
       logger.error('Unable to send love:', err);
       useUIStore.getState().addToast('Love tap not sent — check your connection', 'error');

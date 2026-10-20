@@ -12,6 +12,8 @@ const ProfilePage = lazy(() => import('../pages/ProfilePage'));
 const SettingsPage = lazy(() => import('../pages/SettingsPage'));
 const UsPage = lazy(() => import('../pages/UsPage'));
 const LovePage = lazy(() => import('../pages/LovePage'));
+const PlayPage = lazy(() => import('../pages/PlayPage'));
+const GardenPage = lazy(() => import('../pages/GardenPage'));
 
 export const AppRouter: React.FC = () => {
   return (
@@ -32,6 +34,8 @@ export const AppRouter: React.FC = () => {
         <Route element={<ProtectedRoute />}>
           <Route path="/us" element={<UsPage />} />
           <Route path="/love" element={<LovePage />} />
+          <Route path="/play" element={<PlayPage />} />
+          <Route path="/garden" element={<GardenPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/chat/info" element={<ChatInfoPage />} />
           <Route path="/search" element={<SearchPage />} />
