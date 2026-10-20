@@ -7,6 +7,7 @@ import {
   Send,
   X,
   ChevronLeft,
+  Heart,
   ChevronDown,
   Search,
   CornerDownLeft,
@@ -25,6 +26,7 @@ import {
 import { useAuthStore } from '../store/useAuthStore';
 import { useChatStore } from '../store/useChatStore';
 import { useCallStore } from '../store/useCallStore';
+import { useCoupleStore } from '../store/useCoupleStore';
 import { usePresence } from '../hooks/usePresence';
 import { useInfiniteMessages } from '../hooks/useInfiniteMessages';
 import { useTyping } from '../hooks/useTyping';
@@ -49,6 +51,7 @@ const ChatPage: React.FC = () => {
   const navigate = useNavigate();
   const currentUser = useAuthStore((state) => state.user);
   const partnerUser = useAuthStore((state) => state.getPartnerProfile());
+  const sendLove = useCoupleStore((state) => state.sendLove);
   const { subtext, partnerPresence, initPresenceChannel } = usePresence();
   const { messages, isLoadingMessages } = useInfiniteMessages();
   const { triggerTyping } = useTyping();
@@ -510,17 +513,18 @@ const ChatPage: React.FC = () => {
 
       {/* Header */}
       <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#1E1D24]/95 backdrop-blur-md px-4 py-3 border-b border-stone-100 dark:border-stone-800/80 flex items-center justify-between shadow-soft flex-shrink-0">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <button
-            onClick={() => navigate('/settings')}
-            className="p-1 rounded-full text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+            onClick={() => navigate('/us')}
+            aria-label="Back to Us"
+            className="lg:hidden p-1 rounded-full text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
           >
             <ChevronLeft className="w-6 h-6" />
           </button>
 
           <div
             onClick={() => navigate('/chat/info')}
-            className="flex items-center gap-2.5 cursor-pointer active-scale"
+            className="flex items-center gap-2.5 cursor-pointer active-scale min-w-0"
           >
             <Avatar
               src={partnerUser.avatar_url}
@@ -528,12 +532,13 @@ const ChatPage: React.FC = () => {
               size="md"
               isOnline={partnerPresence.online}
             />
-            <div>
-              <h2 className="text-sm font-bold text-stone-900 dark:text-stone-100 leading-tight">
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-stone-900 dark:text-stone-100 leading-tight flex items-center gap-1 truncate">
                 {partnerDisplayName}
+                {partnerUser.mood && <span title="Mood" className="text-base leading-none">{partnerUser.mood}</span>}
               </h2>
               <p
-                className={`text-[11px] font-semibold ${
+                className={`text-[11px] font-semibold truncate ${
                   subtext.includes('Typing') || isRecordingVoice
                     ? 'text-[#C95565] animate-pulse font-bold'
                     : 'text-stone-400 dark:text-stone-400'
@@ -545,7 +550,15 @@ const ChatPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-0.5 text-stone-600 dark:text-stone-300">
+        <div className="flex items-center gap-0.5 text-stone-600 dark:text-stone-300 flex-shrink-0">
+          <button
+            onClick={() => sendLove('tap')}
+            className="p-2 rounded-full text-[#E05A74] hover:bg-[#E05A74]/10 active:scale-75 transition-transform"
+            title="Send a love tap"
+            aria-label="Send a love tap"
+          >
+            <Heart className="w-5 h-5 fill-[#E05A74]/25" />
+          </button>
           <button
             onClick={() => {
               if (currentUser && partnerUser) {
@@ -572,7 +585,7 @@ const ChatPage: React.FC = () => {
           </button>
           <button
             onClick={() => navigate('/search')}
-            className="p-2 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 active-scale"
+            className="hidden sm:block p-2 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 active-scale"
             title="Search Messages"
             aria-label="Search Messages"
           >

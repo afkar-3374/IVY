@@ -6,6 +6,10 @@ import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { ToastContainer } from '../components/ui/Toast';
 import { InstallPromptBanner } from '../components/Pwa/InstallPromptBanner';
 import { BottomTabBar } from '../components/Navigation/BottomTabBar';
+import { SideNav } from '../components/Navigation/SideNav';
+import { UsDashboard } from '../components/Couple/CoupleCards';
+import { LoveBurstOverlay } from '../components/Couple/LoveBurstOverlay';
+import { useCoupleStore } from '../store/useCoupleStore';
 import { CallOverlay } from '../components/Call/CallOverlay';
 import { queueProcessor } from '../services/sync/queueProcessor';
 import { notificationService } from '../services/notificationService';
@@ -32,8 +36,18 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const notifyVibration = useSettingsStore((state) => state.notifyVibration);
   const dndEnabled = useSettingsStore((state) => state.dndEnabled);
 
-  // Show BottomTabBar on search, settings, info, profile views, but NOT on chat conversation or login
-  const showBottomTabBar = location.pathname !== '/login' && location.pathname !== '/chat';
+  const isUnlocked = useAuthStore((state) => state.isAuthenticated && state.isUnlocked);
+  const isChat = location.pathname === '/chat';
+  // Settings-style pages read best as a centered column on wide screens
+  const isNarrowPage = ['/settings', '/profile', '/search', '/chat/info'].includes(location.pathname);
+  // Phone: the chat screen has its own composer at the bottom, so no tab bar there
+  const showNav = isUnlocked && location.pathname !== '/login';
+
+  // Couple data (start date, special dates, love taps) while unlocked
+  useEffect(() => {
+    if (!isUnlocked) return;
+    return useCoupleStore.getState().init();
+  }, [isUnlocked]);
 
   useEffect(() => {
     // Start periodic background queue sync
@@ -60,10 +74,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   }, [notificationsEnabled, notifyMessages, notifyCalls, notifySound, notifyVibration, dndEnabled]);
 
   return (
-    <div className="min-h-screen w-full flex justify-center bg-[#FDF8F6] dark:bg-[#16151A] text-stone-900 dark:text-stone-100 font-sans antialiased overflow-x-hidden">
-      {/* Desktop & Mobile Responsive Frame Container */}
-      <div className={`w-full max-w-md h-[100dvh] min-h-screen flex flex-col relative shadow-2xl transition-all duration-300 ${activePreset.bgClass}`}>
-        
+    <div className="h-[100dvh] w-full flex bg-gradient-to-br from-[#FFF7F5] via-[#FDF2F4] to-[#F7F1FB] dark:from-[#16151A] dark:via-[#1A1620] dark:to-[#16151A] text-stone-900 dark:text-stone-100 font-sans antialiased overflow-hidden">
+      {showNav && <SideNav />}
+
+      <div className="flex-1 min-w-0 flex flex-col relative">
         {/* Offline notification banner if network drops */}
         {!isOnline && (
           <div className="bg-amber-500 text-white text-[11px] font-semibold py-1 px-3 text-center flex items-center justify-center gap-1.5 z-40">
@@ -81,14 +95,27 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         {/* Toast Notifications Portal */}
         <ToastContainer />
 
-        {/* Main Content Area */}
-        <main className="flex-1 min-h-0 flex flex-col w-full relative">
-          {children}
+        {/* Floating hearts for love taps and hugs */}
+        {isUnlocked && <LoveBurstOverlay />}
+
+        {/* Main Content Area: the chat manages its own scrolling, other pages scroll here */}
+        <main
+          className={`flex-1 min-h-0 w-full relative ${
+            isChat ? `flex flex-col ${activePreset.bgClass}` : 'block overflow-y-auto'
+          }`}
+        >
+          {isNarrowPage ? <div className="w-full max-w-2xl mx-auto lg:py-4">{children}</div> : children}
         </main>
 
-        {/* Bottom Tab Bar Navigation (Shown on Search, Settings & Info views) */}
-        {showBottomTabBar && <BottomTabBar />}
+        {showNav && !isChat && <BottomTabBar />}
       </div>
+
+      {/* Desktop: "Us" panel next to the chat */}
+      {showNav && isChat && (
+        <aside className="hidden xl:block w-[22rem] flex-shrink-0 border-l border-rose-100/80 dark:border-stone-800 bg-white/50 dark:bg-[#1A1920]/60 overflow-y-auto p-5">
+          <UsDashboard compact />
+        </aside>
+      )}
     </div>
   );
 };

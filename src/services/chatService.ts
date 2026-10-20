@@ -57,6 +57,7 @@ async function openProfile(row: UserProfile): Promise<UserProfile> {
     nickname: await open(row.nickname || ''),
     about: await open(row.about || ''),
     avatar_url: await open(row.avatar_url || ''),
+    mood: await open(row.mood || ''),
   };
 }
 

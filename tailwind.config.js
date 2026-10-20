@@ -38,6 +38,7 @@ export default {
         sans: ['Plus Jakarta Sans', 'Inter', 'sans-serif'],
         serif: ['Playfair Display', 'Cormorant Garamond', 'serif'],
         cursive: ['Cormorant Garamond', 'Playfair Display', 'serif'],
+        cute: ['Fredoka', 'Plus Jakarta Sans', 'sans-serif'],
       },
       borderRadius: {
         '2xl': '1rem',
@@ -48,6 +49,23 @@ export default {
         'soft': '0 4px 20px -2px rgba(201, 85, 101, 0.08), 0 2px 6px -1px rgba(0, 0, 0, 0.04)',
         'soft-lg': '0 10px 30px -4px rgba(201, 85, 101, 0.12), 0 4px 10px -2px rgba(0, 0, 0, 0.05)',
         'rose-glow': '0 0 20px rgba(201, 85, 101, 0.25)',
+      },
+      keyframes: {
+        'float-up': {
+          '0%': { transform: 'translateY(0) scale(0.6)', opacity: '0' },
+          '15%': { opacity: '1' },
+          '100%': { transform: 'translateY(-75vh) scale(1.2)', opacity: '0' },
+        },
+        heartbeat: {
+          '0%, 100%': { transform: 'scale(1)' },
+          '15%': { transform: 'scale(1.15)' },
+          '30%': { transform: 'scale(1)' },
+          '45%': { transform: 'scale(1.1)' },
+        },
+      },
+      animation: {
+        'float-up': 'float-up 2.6s ease-out forwards',
+        heartbeat: 'heartbeat 1.6s ease-in-out infinite',
       }
     },
   },

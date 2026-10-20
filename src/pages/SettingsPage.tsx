@@ -73,7 +73,7 @@ const SettingsPage: React.FC = () => {
         <div className="w-6" />
       </div>
 
-      <div className="p-4 space-y-4 max-w-sm mx-auto w-full">
+      <div className="p-4 space-y-4 max-w-lg mx-auto w-full">
         {/* Partner Profile Header Banner Card (Matches Mockup) */}
         <div
           onClick={() => navigate('/profile')}

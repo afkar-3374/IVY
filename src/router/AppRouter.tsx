@@ -10,6 +10,8 @@ const ChatInfoPage = lazy(() => import('../pages/ChatInfoPage'));
 const SearchPage = lazy(() => import('../pages/SearchPage'));
 const ProfilePage = lazy(() => import('../pages/ProfilePage'));
 const SettingsPage = lazy(() => import('../pages/SettingsPage'));
+const UsPage = lazy(() => import('../pages/UsPage'));
+const LovePage = lazy(() => import('../pages/LovePage'));
 
 export const AppRouter: React.FC = () => {
   return (
@@ -28,6 +30,8 @@ export const AppRouter: React.FC = () => {
 
         {/* Protected Routes */}
         <Route element={<ProtectedRoute />}>
+          <Route path="/us" element={<UsPage />} />
+          <Route path="/love" element={<LovePage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/chat/info" element={<ChatInfoPage />} />
           <Route path="/search" element={<SearchPage />} />
@@ -36,7 +40,7 @@ export const AppRouter: React.FC = () => {
         </Route>
 
         {/* Catch-all redirect */}
-        <Route path="*" element={<Navigate to="/chat" replace />} />
+        <Route path="*" element={<Navigate to="/us" replace />} />
       </Routes>
     </Suspense>
   );

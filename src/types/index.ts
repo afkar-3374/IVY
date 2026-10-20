@@ -9,6 +9,7 @@ export interface UserProfile {
   nickname: string; // Personal nickname assigned to partner
   about: string;
   avatar_url: string;
+  mood?: string;
   wallpaper: string;
   theme: 'rose' | 'midnight' | 'sunset' | 'lavender';
   created_at: string;
