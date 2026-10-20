@@ -142,6 +142,43 @@ async function toLocalMessage(item: any, existingLocal?: Message): Promise<Messa
   };
 }
 
+/** Partner messages this device has received but not yet reported as delivered. */
+const toConfirm = new Set<string>();
+const confirmed = new Set<string>();
+let confirmTimer: number | null = null;
+
+/** Tell the sender (two grey ticks) that their messages reached this device. Never downgrades "read". */
+function confirmDelivered(items: Array<{ local_uuid?: string; id: string; sender_id: string; status?: string }>, myId: string | undefined) {
+  if (!myId || !supabase) return;
+  for (const item of items) {
+    const key = item.local_uuid || item.id;
+    if (item.sender_id !== myId && (item.status === 'sent' || item.status === 'Sent') && !confirmed.has(key)) {
+      toConfirm.add(key);
+      confirmed.add(key);
+    }
+  }
+  if (toConfirm.size === 0 || confirmTimer !== null) return;
+  confirmTimer = window.setTimeout(async () => {
+    confirmTimer = null;
+    const uuids = [...toConfirm];
+    toConfirm.clear();
+    const { error } = await supabase!.from('messages').update({ status: 'delivered' }).in('local_uuid', uuids).eq('status', 'sent');
+    if (error) {
+      logger.warn('Unable to confirm delivery:', error.message);
+      uuids.forEach((u) => {
+        confirmed.delete(u);
+        toConfirm.add(u);
+      });
+    }
+  }, 300);
+}
+
+async function myUserId(): Promise<string | undefined> {
+  if (!supabase) return undefined;
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user.id;
+}
+
 export class ChatService {
   private realtimeUnsubscribe: (() => void) | null = null;
   /**
@@ -235,6 +272,7 @@ export class ChatService {
           ]);
 
           if (remoteMsgs && remoteMsgs.length > 0) {
+            confirmDelivered(remoteMsgs, await myUserId());
             for (const item of remoteMsgs) {
               const existingLocal = await ivyDb.messages.get(item.local_uuid || item.id);
               const msg = await toLocalMessage(item, existingLocal);
@@ -504,6 +542,7 @@ export class ChatService {
           }
           const item = payload.new as any;
           if (item && item.content) {
+            if (payload.eventType === 'INSERT') confirmDelivered([item], await myUserId());
             const localUuid = item.local_uuid || item.id;
             const existingLocal = await ivyDb.messages.get(localUuid);
             const msg = await toLocalMessage(item, existingLocal);

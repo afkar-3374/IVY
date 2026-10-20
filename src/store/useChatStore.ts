@@ -38,6 +38,12 @@ interface ChatState {
 
 const PAGE_SIZE = 50;
 
+const TICK_ORDER: Record<string, number> = { Failed: 0, Queued: 1, Sending: 1, Retrying: 1, Sent: 2, Delivered: 3, Read: 4 };
+/** Keep the furthest delivery status (e.g. a late "sent" event must not undo "read"). */
+function furthest(a: Message['status'], b: Message['status']): Message['status'] {
+  return (TICK_ORDER[b] ?? 0) >= (TICK_ORDER[a] ?? 0) ? b : a;
+}
+
 /** Results from the send queue (and background file downloads) update the visible chat directly. */
 if (typeof window !== 'undefined') {
   window.addEventListener('ivy:message-content', (e) => {
@@ -85,7 +91,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             return {
               messages: state.messages.map((m) =>
                 m.local_uuid === incomingMsg.local_uuid || m.id === incomingMsg.id
-                  ? { ...m, ...incomingMsg }
+                  ? { ...m, ...incomingMsg, status: furthest(m.status, incomingMsg.status) }
                   : m
               ),
             };

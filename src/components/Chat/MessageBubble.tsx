@@ -111,18 +111,19 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         </span>
       );
     }
+    // WhatsApp-style ticks: ✓ sent · ✓✓ delivered · blue ✓✓ read
     if (message.status === 'Sent') {
       return (
-        <span title="Sent">
-          <Check className={`w-3.5 h-3.5 ${bigEmoji ? 'text-stone-400' : 'text-white/85'}`} />
-        </span>
+        <motion.span title="Sent" initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+          <Check className={`w-3.5 h-3.5 ${bigEmoji ? 'text-stone-400' : 'text-white/80'}`} strokeWidth={2.5} />
+        </motion.span>
       );
     }
     if (message.status === 'Delivered') {
       return (
-        <span title="Delivered">
-          <CheckCheck className={`w-3.5 h-3.5 ${bigEmoji ? 'text-stone-400' : 'text-white/85'}`} />
-        </span>
+        <motion.span title="Delivered" initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+          <CheckCheck className={`w-3.5 h-3.5 ${bigEmoji ? 'text-stone-400' : 'text-white/80'}`} strokeWidth={2.5} />
+        </motion.span>
       );
     }
     if (message.status === 'Failed') {
@@ -142,7 +143,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     }
     return (
       <motion.span title="Read" initial={{ scale: 0.4 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 400, damping: 15 }}>
-        <CheckCheck className={`w-3.5 h-3.5 ${bigEmoji ? 'text-[#E05A74]' : 'text-white'}`} strokeWidth={2.5} />
+        <CheckCheck className="w-3.5 h-3.5 text-[#53BDEB] drop-shadow-[0_0_1px_rgba(0,0,0,0.35)]" strokeWidth={2.75} />
       </motion.span>
     );
   };

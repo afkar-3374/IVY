@@ -59,6 +59,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     const me = useAuthStore.getState().user?.id;
     const stopPresence = me ? usePresenceStore.getState().initPresenceChannel(me) : () => {};
     void pushService.refresh();
+    // Receive messages on every screen, so the sender sees "delivered" (✓✓) right away
+    void import('../store/useChatStore').then(({ useChatStore }) => useChatStore.getState().loadInitialMessages());
     // Fetch call relay details ahead of time so calls start instantly
     void import('../services/callService').then(({ callService }) => callService.loadIceServers());
     return () => {
