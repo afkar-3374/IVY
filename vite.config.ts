@@ -7,32 +7,52 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'pwa-icon.svg', 'push-handler.js'],
+      // We decide when to switch to a new version (never in the middle of a call)
+      registerType: 'prompt',
+      injectRegister: false,
+      includeAssets: ['favicon.svg', 'favicon-48x48.png', 'apple-touch-icon.png', 'badge-96x96.png', 'push-handler.js'],
       manifest: {
+        id: '/',
         name: 'Ivy - Private Couple Chat',
         short_name: 'Ivy',
         description: 'Our space, just for us. Private messenger for two.',
-        theme_color: '#FDF8F6',
+        theme_color: '#C95565',
         background_color: '#FDF8F6',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
+        scope: '/',
+        categories: ['social', 'lifestyle'],
         icons: [
-          {
-            src: 'pwa-icon.svg',
-            sizes: '512x512',
-            type: 'image/svg+xml',
-            purpose: 'any maskable'
-          }
-        ]
+          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: 'maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        navigateFallback: 'index.html',
+        cleanupOutdatedCaches: true,
         // Push notifications while the app is closed
         importScripts: ['push-handler.js'],
-      }
-    })
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.origin === 'https://fonts.googleapis.com',
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'google-fonts-css' },
+          },
+          {
+            urlPattern: ({ url }) => url.origin === 'https://fonts.gstatic.com',
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts',
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
+      },
+    }),
   ],
   resolve: {
     alias: {

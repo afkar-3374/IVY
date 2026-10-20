@@ -86,7 +86,7 @@ class NotificationService {
     try {
       const notif = new Notification(title, {
         icon: '/pwa-192x192.png',
-        badge: '/pwa-192x192.png',
+        badge: '/badge-96x96.png',
         silent: true, // we play our own sound
         tag: key,
         ...notifOptions,

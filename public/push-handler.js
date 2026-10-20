@@ -9,8 +9,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'Ivy';
   const options = {
     body: data.body || '💌 Something new for you',
-    icon: '/pwa-icon.svg',
-    badge: '/pwa-icon.svg',
+    icon: '/pwa-192x192.png',
+    badge: '/badge-96x96.png',
     tag: data.tag || 'ivy',
     renotify: true,
     requireInteraction: data.kind === 'call',
