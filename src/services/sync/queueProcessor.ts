@@ -8,6 +8,23 @@ import { seal, hasCoupleKey } from '../crypto/coupleCrypto';
 import { pushService } from '../pushService';
 import type { Message, MessageReaction } from '../../types';
 
+/** Tell the chat screen how a send ended (it otherwise waits for the realtime echo). */
+function announce(localUuid: string, status: Message['status'], id?: string) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('ivy:message-status', { detail: { localUuid, status, id } }));
+}
+
+/** Reject if `promise` takes longer than `ms`, so one stuck request can't block the queue. */
+function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`Timed out after ${ms / 1000}s`)), ms);
+    Promise.resolve(promise).then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); }
+    );
+  });
+}
+
 class QueueProcessor {
   private isProcessing = false;
   private rerunRequested = false;
@@ -24,6 +41,8 @@ class QueueProcessor {
 
   public startPeriodicSync(intervalMs = 10000) {
     if (typeof window !== 'undefined' && !this.intervalId) {
+      // Nothing is being processed yet, so anything marked "Sending" was interrupted
+      void syncQueue.resetInterrupted().then(() => this.processQueue());
       this.intervalId = window.setInterval(() => this.processQueue(), intervalMs);
     }
   }
@@ -61,22 +80,34 @@ class QueueProcessor {
             const msgPayload = item.payload as unknown as Message;
 
             if (supabase) {
-              const { data, error } = await supabase
-                .from('messages')
-                .insert({
-                  local_uuid: msgPayload.local_uuid,
-                  sender_id: msgPayload.sender_id,
-                  receiver_id: msgPayload.receiver_id,
-                  content: await seal(msgPayload.content),
-                  message_type: msgPayload.message_type || 'text',
-                  reply_to: msgPayload.reply_to || null,
-                  status: 'sent'
-                })
-                .select('*')
-                .single();
+              const client = supabase;
+              const big = (msgPayload.content?.length || 0) > 200_000;
+              let { data, error } = await withTimeout(
+                (async () =>
+                  client
+                    .from('messages')
+                    .insert({
+                      local_uuid: msgPayload.local_uuid,
+                      sender_id: msgPayload.sender_id,
+                      receiver_id: msgPayload.receiver_id,
+                      content: await seal(msgPayload.content),
+                      message_type: msgPayload.message_type || 'text',
+                      reply_to: msgPayload.reply_to || null,
+                      status: 'sent'
+                    })
+                    .select('*')
+                    .single())(),
+                big ? 180_000 : 25_000
+              );
+
+              // Already on the server (an earlier attempt got through but its reply was lost)
+              if (error && error.code === '23505') {
+                ({ data, error } = await client.from('messages').select('*').eq('local_uuid', msgPayload.local_uuid).single());
+              }
 
               if (!error && data) {
                 await conflictResolver.resolveMessageSync(msgPayload.local_uuid, data.id);
+                announce(msgPayload.local_uuid, 'Sent', data.id);
                 if (msgPayload.message_type !== 'system') void pushService.notifyPartner('message');
                 success = true;
               } else {
@@ -209,6 +240,7 @@ class QueueProcessor {
               if (local && (local.status === 'Sending' || local.status === 'Queued')) {
                 local.status = 'Failed';
                 await ivyDb.messages.put(local);
+                announce(local.local_uuid, 'Failed');
               }
             }
           }
@@ -222,6 +254,7 @@ class QueueProcessor {
             if (local && (local.status === 'Sending' || local.status === 'Queued')) {
               local.status = 'Failed';
               await ivyDb.messages.put(local);
+              announce(local.local_uuid, 'Failed');
             }
           }
         }

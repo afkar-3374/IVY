@@ -210,3 +210,25 @@
 .shooting-water { animation: water-flow 0.9s linear infinite; }
 @keyframes water-flow { to { stroke-dashoffset: -2.4; } }
 @media (prefers-reduced-motion: reduce) { .shooting-water { animation: none !important; } }
+
+/* Chat */
+.bubble-mine {
+  color: #fff;
+  background: linear-gradient(160deg, #F7A1B3 0%, #EC6F89 45%, #D94C69 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 6px 16px -8px rgba(217, 76, 105, 0.6);
+}
+.dark .bubble-mine { background: linear-gradient(160deg, #C9567A 0%, #A63A5C 60%, #8A2D4B 100%); }
+.chat-wallpaper {
+  background-image:
+    radial-gradient(circle at 20% 15%, rgba(244, 138, 160, 0.16), transparent 40%),
+    radial-gradient(circle at 85% 70%, rgba(182, 140, 240, 0.14), transparent 45%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cpath d='M28 34c-6-4-8-8-5.5-10.5 1.7-1.7 4.2-1 5.5 1 1.3-2 3.8-2.7 5.5-1 2.5 2.5.5 6.5-5.5 10.5z' fill='%23E05A74' fill-opacity='0.05'/%3E%3C/svg%3E");
+}
+.typing-dot { animation: typing 1.2s ease-in-out infinite; }
+@keyframes typing { 0%, 60%, 100% { transform: translateY(0); opacity: 0.45; } 30% { transform: translateY(-4px); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .typing-dot { animation: none !important; } }
+.online-pulse { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55); animation: online-pulse 2.4s ease-out infinite; }
+@keyframes online-pulse { 70% { box-shadow: 0 0 0 7px rgba(52, 211, 153, 0); } 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); } }
+@media (prefers-reduced-motion: reduce) { .online-pulse { animation: none !important; } }

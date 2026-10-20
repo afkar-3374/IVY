@@ -38,6 +38,26 @@ interface ChatState {
 
 const PAGE_SIZE = 50;
 
+/** Results from the send queue (and background file downloads) update the visible chat directly. */
+if (typeof window !== 'undefined') {
+  window.addEventListener('ivy:message-content', (e) => {
+    const { localUuid, content } = (e as CustomEvent<{ localUuid: string; content: string }>).detail;
+    useChatStore.setState((state) => ({
+      messages: state.messages.map((m) => (m.local_uuid === localUuid ? { ...m, content } : m)),
+    }));
+  });
+  window.addEventListener('ivy:message-status', (e) => {
+    const { localUuid, status, id } = (e as CustomEvent<{ localUuid: string; status: Message['status']; id?: string }>).detail;
+    useChatStore.setState((state) => ({
+      messages: state.messages.map((m) =>
+        m.local_uuid === localUuid && m.status !== 'Read' && m.status !== 'Delivered'
+          ? { ...m, status, id: id || m.id }
+          : m
+      ),
+    }));
+  });
+}
+
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isLoadingMessages: false,
@@ -52,15 +72,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   loadInitialMessages: async () => {
     set({ isLoadingMessages: true });
-    const msgs = await chatService.getMessages();
-    const visibleMessages = msgs.slice(-PAGE_SIZE);
-    set({
-      messages: visibleMessages,
-      isLoadingMessages: false,
-      hasMoreMessages: msgs.length > PAGE_SIZE,
-      pageOffset: 0,
-    });
 
+    // Connect live first: nothing sent while history loads can be missed
     if (!get().isRealtimeSubscribed) {
       set({ isRealtimeSubscribed: true });
       chatService.subscribeToRealtimeMessages((incomingMsg) => {
@@ -106,8 +119,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
           const byId = new Map(allMessages.map((m) => [m.local_uuid, m]));
           return { messages: state.messages.map((m) => byId.get(m.local_uuid) || m) };
         });
+      }, async () => {
+        // Catch up on anything missed while (re)connecting, keeping the loaded window size
+        const all = await chatService.getMessages();
+        set((state) => {
+          const keep = Math.max(PAGE_SIZE, state.messages.length);
+          return { messages: all.slice(-keep), hasMoreMessages: all.length > keep };
+        });
       });
     }
+
+    // Show what is cached on this device straight away, then refresh from the server
+    const cached = await chatService.getMessages(false);
+    if (cached.length > 0 && get().messages.length === 0) {
+      set({ messages: cached.slice(-PAGE_SIZE), hasMoreMessages: cached.length > PAGE_SIZE, isLoadingMessages: false });
+    }
+    const msgs = await chatService.getMessages();
+    set((state) => {
+      const keep = Math.max(PAGE_SIZE, state.messages.length);
+      return {
+        messages: msgs.slice(-keep),
+        isLoadingMessages: false,
+        hasMoreMessages: msgs.length > keep,
+        pageOffset: 0,
+      };
+    });
   },
 
   loadMoreMessages: async () => {

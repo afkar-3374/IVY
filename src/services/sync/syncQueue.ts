@@ -11,8 +11,13 @@ export class SyncQueue {
       .filter((item) => {
         if (item.status === 'Sending') return false;
         const current = item.payload as Record<string, unknown>;
-        return current.local_uuid === payload.local_uuid
-          || (current.message_id === payload.message_id && current.profile_id === payload.profile_id);
+        // Only merge actions about the same message (or the same reaction). Comparing
+        // missing keys (undefined === undefined) used to merge unrelated messages.
+        if (payload.local_uuid !== undefined) return current.local_uuid === payload.local_uuid;
+        if (payload.message_id !== undefined) {
+          return current.message_id === payload.message_id && current.profile_id === payload.profile_id;
+        }
+        return false;
       })
       .first();
 
@@ -35,11 +40,16 @@ export class SyncQueue {
     return item;
   }
 
+  /** Items left "Sending" by a closed or frozen app are picked up again. */
+  async resetInterrupted(): Promise<void> {
+    await ivyDb.syncQueue.where('status').equals('Sending').modify({ status: 'Queued' });
+  }
+
   async getPending(): Promise<SyncQueueItem[]> {
     return await ivyDb.syncQueue
       .where('status')
       .anyOf(['Queued', 'Failed'])
-      .filter((item) => item.retry_count < 5)
+      .filter((item) => item.retry_count < 8)
       .sortBy('created_at');
   }
 

@@ -61,6 +61,7 @@ const ChatPage: React.FC = () => {
   const [inputContent, setInputContent] = useState('');
   const [isActionModalOpen, setIsActionModalOpen] = useState(false);
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+  const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
   const [isReactionsModalOpen, setIsReactionsModalOpen] = useState(false);
   const [isMediaViewerOpen, setIsMediaViewerOpen] = useState(false);
   const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
@@ -508,7 +509,7 @@ const ChatPage: React.FC = () => {
       )}
 
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#1E1D24]/95 backdrop-blur-md px-4 py-3 border-b border-stone-100 dark:border-stone-800/80 flex items-center justify-between shadow-soft flex-shrink-0">
+      <header className="glass !rounded-none !border-x-0 !border-t-0 sticky top-0 z-30 px-3 sm:px-4 py-2.5 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <button
             onClick={() => navigate('/us')}
@@ -522,26 +523,44 @@ const ChatPage: React.FC = () => {
             onClick={() => navigate('/chat/info')}
             className="flex items-center gap-2.5 cursor-pointer active-scale min-w-0"
           >
-            <Avatar
-              src={partnerUser.avatar_url}
-              name={partnerDisplayName}
-              size="md"
-              isOnline={partnerPresence.online}
-            />
+            <div className="relative">
+              {partnerPresence.online && <span className="online-pulse absolute inset-0 rounded-full" />}
+              <Avatar src={partnerUser.avatar_url} name={partnerDisplayName} size="md" isOnline={partnerPresence.online} />
+            </div>
             <div className="min-w-0">
               <h2 className="text-sm font-bold text-stone-900 dark:text-stone-100 leading-tight flex items-center gap-1 truncate">
                 {partnerDisplayName}
                 {partnerUser.mood && <span title="Mood" className="text-base leading-none">{partnerUser.mood}</span>}
               </h2>
-              <p
-                className={`text-[11px] font-semibold truncate ${
-                  subtext.includes('Typing') || isRecordingVoice
-                    ? 'text-[#C95565] animate-pulse font-bold'
-                    : 'text-stone-400 dark:text-stone-400'
-                }`}
-              >
-                {isRecordingVoice ? 'Recording Voice...' : subtext}
-              </p>
+              <AnimatePresence mode="wait">
+                <motion.p
+                  key={subtext}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.18 }}
+                  className={`text-[11px] font-semibold truncate flex items-center gap-1 ${
+                    subtext.includes('Typing') || subtext.includes('Recording')
+                      ? 'text-[#E05A74]'
+                      : partnerPresence.online
+                      ? 'text-emerald-600'
+                      : 'text-stone-400 dark:text-stone-400'
+                  }`}
+                >
+                  {subtext.includes('Typing') ? (
+                    <>
+                      typing
+                      <span className="inline-flex gap-0.5 ml-0.5">
+                        {[0, 1, 2].map((i) => (
+                          <span key={i} className="typing-dot w-1 h-1 rounded-full bg-[#E05A74]" style={{ animationDelay: `${i * 0.15}s` }} />
+                        ))}
+                      </span>
+                    </>
+                  ) : (
+                    subtext
+                  )}
+                </motion.p>
+              </AnimatePresence>
             </div>
           </div>
         </div>
@@ -628,23 +647,50 @@ const ChatPage: React.FC = () => {
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-3 relative"
+        className="chat-wallpaper flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 sm:px-6 pt-2 pb-4 relative"
       >
         {isLoadingMessages && messages.length === 0 && (
           <div className="text-center py-4 text-xs text-stone-400">Loading messages...</div>
         )}
 
+        {!isLoadingMessages && messages.length === 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="h-full flex flex-col items-center justify-center text-center px-6"
+          >
+            <div className="text-6xl animate-heartbeat mb-3">💌</div>
+            <p className="font-serif italic text-2xl text-stone-700 dark:text-stone-200">Say something sweet</p>
+            <p className="text-xs text-stone-500 mt-1 mb-4">Only you two can ever read this chat</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {['Good morning ☀️', 'I miss you 🥺', 'Love you 💗'].map((t) => (
+                <button key={t} type="button" onClick={() => setInputContent(t)} className="glass rounded-full px-3.5 py-1.5 text-sm text-stone-700 dark:text-stone-200 active:scale-95 transition-transform">
+                  {t}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
         {messages.map((msg, idx) => {
           const prevMsg = messages[idx - 1];
+          const nextMsg = messages[idx + 1];
           const showDateSeparator =
             !prevMsg ||
             new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString();
+          // Consecutive messages from the same person within 5 minutes form a group
+          const sameRun = (a?: Message, b?: Message) =>
+            Boolean(a && b && a.sender_id === b.sender_id && a.message_type !== 'system' && b.message_type !== 'system' &&
+              Math.abs(new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) < 5 * 60_000 &&
+              new Date(a.created_at).toDateString() === new Date(b.created_at).toDateString());
+          const isFirstInGroup = showDateSeparator || !sameRun(prevMsg, msg);
+          const isLastInGroup = !sameRun(msg, nextMsg);
 
           return (
             <React.Fragment key={msg.local_uuid || msg.id}>
               {showDateSeparator && (
-                <div className="flex justify-center my-3">
-                  <span className="px-3 py-1 bg-white/80 dark:bg-stone-800/80 rounded-full text-[11px] font-semibold text-stone-500 dark:text-stone-400 shadow-soft backdrop-blur-sm border border-stone-100 dark:border-stone-700/50">
+                <div className="flex justify-center mt-5 mb-2 sticky top-1 z-10">
+                  <span className="glass px-3 py-1 rounded-full text-[11px] font-semibold text-stone-500 dark:text-stone-300">
                     {formatDateSeparator(msg.created_at)}
                   </span>
                 </div>
@@ -658,10 +704,30 @@ const ChatPage: React.FC = () => {
                 onSwipeToReply={(m) => setActiveReplyTarget(m)}
                 onRetry={(m) => retryFailedMessage(m.local_uuid)}
                 onJumpToOriginal={jumpToOriginalMessage}
+                isFirstInGroup={isFirstInGroup}
+                isLastInGroup={isLastInGroup}
               />
             </React.Fragment>
           );
         })}
+
+        {/* Partner typing bubble */}
+        <AnimatePresence>
+          {partnerPresence.typing && (
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.8 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 26 }}
+              className="glass mt-3 mr-auto w-fit rounded-[1.35rem] rounded-bl-md px-4 py-3 flex gap-1"
+              aria-label={`${partnerDisplayName} is typing`}
+            >
+              {[0, 1, 2].map((i) => (
+                <span key={i} className="typing-dot w-2 h-2 rounded-full bg-[#E05A74]/70" style={{ animationDelay: `${i * 0.15}s` }} />
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div ref={messagesEndRef} />
       </div>
@@ -670,7 +736,7 @@ const ChatPage: React.FC = () => {
       {showScrollBottomBtn && (
         <button
           onClick={scrollToBottom}
-          className="absolute bottom-20 right-5 z-30 p-2.5 rounded-full bg-white dark:bg-[#1E1D24] text-[#C95565] shadow-lg border border-stone-100 dark:border-stone-800 active-scale hover:scale-105 transition-all"
+          className="glass absolute bottom-24 right-4 z-30 p-2.5 rounded-full text-[#E05A74] active:scale-90 hover:scale-105 transition-transform"
           title="Scroll to latest message"
         >
           <ChevronDown className="w-5 h-5" />
@@ -685,7 +751,7 @@ const ChatPage: React.FC = () => {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.98 }}
             transition={{ duration: 0.2 }}
-            className="bg-white/95 dark:bg-[#1E1D24]/95 px-4 py-2 border-t border-stone-200 dark:border-stone-800 flex items-center justify-between z-20 flex-shrink-0 shadow-sm"
+            className="glass mx-3 mb-1 rounded-2xl px-4 py-2 flex items-center justify-between z-20 flex-shrink-0"
           >
             <div className="border-l-2 border-[#C95565] pl-3 text-xs flex-1 min-w-0 pr-2">
               <span className="font-bold text-[#C95565] flex items-center gap-1">
@@ -710,10 +776,10 @@ const ChatPage: React.FC = () => {
       </AnimatePresence>
 
       {/* Message Input / Voice Note Recorder Footer */}
-      <footer className="z-30 w-full bg-white/95 dark:bg-[#1E1D24]/95 backdrop-blur-md p-3 border-t border-stone-100 dark:border-stone-800 pb-safe flex-shrink-0 shadow-soft">
+      <footer className="z-30 w-full px-2 sm:px-4 pt-1 pb-[max(env(safe-area-inset-bottom),0.6rem)] flex-shrink-0">
         {isRecordingVoice ? (
           /* Live Voice Note Recording Bar */
-          <div className="flex items-center justify-between gap-3 max-w-2xl mx-auto px-2 py-1">
+          <div className="glass flex items-center justify-between gap-3 max-w-3xl mx-auto rounded-[1.75rem] p-1.5">
             <button
               type="button"
               onClick={cancelRecording}
@@ -764,36 +830,54 @@ const ChatPage: React.FC = () => {
           </div>
         ) : (
           /* Standard Input Bar */
-          <form onSubmit={handleSend} className="flex items-center gap-2 max-w-2xl mx-auto">
-            {/* Gallery Picker Trigger */}
+          <form onSubmit={handleSend} className="glass relative flex items-center gap-1.5 max-w-3xl mx-auto rounded-[1.75rem] p-1.5">
+            {/* Attach menu: photos, camera, file */}
             <button
               type="button"
-              onClick={() => galleryInputRef.current?.click()}
-              className="w-10 h-10 rounded-full bg-stone-100 dark:bg-stone-800 text-[#C95565] flex items-center justify-center flex-shrink-0 active-scale hover:bg-rose-50 dark:hover:bg-stone-700"
-              title="Attach Images or Videos"
+              onClick={() => setIsAttachMenuOpen((open) => !open)}
+              className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300 ${
+                isAttachMenuOpen ? 'bg-[#E05A74] text-white rotate-45' : 'bg-rose-50 dark:bg-white/5 text-[#E05A74] hover:bg-rose-100'
+              }`}
+              title="Attach"
+              aria-label="Attach"
+              aria-expanded={isAttachMenuOpen}
             >
               <Plus className="w-5 h-5" />
             </button>
-
-            {/* Document File Attachment Trigger */}
-            <button
-              type="button"
-              onClick={() => documentInputRef.current?.click()}
-              className="w-10 h-10 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 flex items-center justify-center flex-shrink-0 active-scale hover:text-[#C95565]"
-              title="Attach Document or File"
-            >
-              <Paperclip className="w-5 h-5" />
-            </button>
-
-            {/* Camera Capture Trigger */}
-            <button
-              type="button"
-              onClick={() => cameraInputRef.current?.click()}
-              className="w-10 h-10 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 flex items-center justify-center flex-shrink-0 active-scale hover:text-[#C95565]"
-              title="Take Photo or Video"
-            >
-              <Camera className="w-5 h-5" />
-            </button>
+            <AnimatePresence>
+              {isAttachMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.9 }}
+                  transition={{ type: 'spring', stiffness: 420, damping: 30 }}
+                  className="glass absolute bottom-full left-0 mb-2 rounded-2xl p-1.5 flex flex-col gap-0.5 min-w-[11rem] z-40"
+                >
+                  {[
+                    { label: 'Photos & videos', icon: ImageIcon, title: 'Attach Images or Videos', onClick: () => galleryInputRef.current?.click() },
+                    { label: 'Camera', icon: Camera, title: 'Take Photo or Video', onClick: () => cameraInputRef.current?.click() },
+                    { label: 'File', icon: Paperclip, title: 'Attach Document or File', onClick: () => documentInputRef.current?.click() },
+                  ].map(({ label, icon: Icon, title, onClick }, i) => (
+                    <motion.button
+                      key={label}
+                      type="button"
+                      title={title}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.04 }}
+                      onClick={() => {
+                        setIsAttachMenuOpen(false);
+                        onClick();
+                      }}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-stone-700 dark:text-stone-200 hover:bg-rose-50 dark:hover:bg-white/5"
+                    >
+                      <span className="w-8 h-8 rounded-full btn-gloss flex items-center justify-center"><Icon className="w-4 h-4" /></span>
+                      {label}
+                    </motion.button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <div className="flex-1 relative flex items-center">
               <input
@@ -804,6 +888,7 @@ const ChatPage: React.FC = () => {
                   setInputContent(e.target.value);
                   triggerTyping();
                 }}
+                onFocus={() => setIsAttachMenuOpen(false)}
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') {
                     setActiveReplyTarget(null);
@@ -817,7 +902,7 @@ const ChatPage: React.FC = () => {
                     ? 'Type your reply...'
                     : 'Type a message...'
                 }
-                className="w-full bg-stone-100 dark:bg-[#16151A] text-stone-900 dark:text-stone-100 text-sm px-4 py-2.5 rounded-full border border-transparent focus:outline-none focus:border-[#C95565]/40 pr-10"
+                className="w-full bg-transparent text-stone-900 dark:text-stone-100 text-[15px] pl-2 pr-9 py-2 focus:outline-none placeholder:text-stone-400"
               />
               <button
                 type="button"
@@ -825,31 +910,36 @@ const ChatPage: React.FC = () => {
                   setSelectedMessage(null);
                   setIsEmojiPickerOpen((prev) => !prev);
                 }}
-                className="absolute right-3 text-stone-400 hover:text-[#C95565]"
+                className="absolute right-1 p-1 text-stone-400 hover:text-[#E05A74] transition-colors"
                 title="Emoji Picker"
               >
                 <Smile className="w-5 h-5" />
               </button>
             </div>
 
-            {inputContent.trim() ? (
-              <button
-                type="submit"
-                className="w-10 h-10 rounded-full bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-soft active-scale hover:bg-[#B34757]"
-                title="Send"
-              >
-                <Send className="w-4 h-4 ml-0.5" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={startRecording}
-                className="w-10 h-10 rounded-full bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-soft active-scale hover:bg-[#B34757]"
-                title="Record Voice Note"
-              >
-                <Mic className="w-5 h-5" />
-              </button>
-            )}
+            {/* One button: mic when empty, glossy send while typing (switches instantly) */}
+            <motion.button
+              type={inputContent.trim() ? 'submit' : 'button'}
+              onClick={inputContent.trim() ? undefined : startRecording}
+              whileTap={{ scale: 0.85 }}
+              className={`relative w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden transition-colors duration-200 ${
+                inputContent.trim() ? 'btn-gloss' : 'bg-rose-50 dark:bg-white/5 text-[#E05A74] hover:bg-rose-100'
+              }`}
+              title={inputContent.trim() ? 'Send' : 'Record Voice Note'}
+            >
+              <AnimatePresence initial={false}>
+                <motion.span
+                  key={inputContent.trim() ? 'send' : 'mic'}
+                  className="absolute inset-0 flex items-center justify-center"
+                  initial={{ scale: 0.3, rotate: -90, opacity: 0 }}
+                  animate={{ scale: 1, rotate: 0, opacity: 1 }}
+                  exit={{ scale: 0.3, rotate: 90, opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                >
+                  {inputContent.trim() ? <Send className="w-4 h-4 ml-0.5" /> : <Mic className="w-5 h-5" />}
+                </motion.span>
+              </AnimatePresence>
+            </motion.button>
           </form>
         )}
       </footer>

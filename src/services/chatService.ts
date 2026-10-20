@@ -3,6 +3,33 @@ import { logger } from './logger/logger';
 import { generateLocalUuid } from '../utils/message';
 import { USER_1_ID } from '../utils/constants';
 import { seal, open, DECRYPT_FAILED } from './crypto/coupleCrypto';
+
+const FILE_PREFIX = 'encf1:';
+/** Big encrypted files waiting to be downloaded (local_uuid → ciphertext ref) */
+const pendingFiles = new Map<string, string>();
+let fileWorkerRunning = false;
+
+/** Download and decrypt big files one at a time, then tell the chat to refresh. */
+async function drainPendingFiles(): Promise<void> {
+  if (fileWorkerRunning) return;
+  fileWorkerRunning = true;
+  try {
+    while (pendingFiles.size > 0) {
+      const [localUuid, cipher] = pendingFiles.entries().next().value as [string, string];
+      pendingFiles.delete(localUuid);
+      const content = await open(cipher);
+      const local = await ivyDb.messages.get(localUuid);
+      if (local && local.cipher !== cipher) {
+        local.content = content;
+        local.cipher = content === DECRYPT_FAILED ? undefined : cipher;
+        await ivyDb.messages.put(local);
+        window.dispatchEvent(new CustomEvent('ivy:message-content', { detail: { localUuid, content } }));
+      }
+    }
+  } finally {
+    fileWorkerRunning = false;
+  }
+}
 import type { Message, UserProfile, MessageReaction, MessageType } from '../types';
 import { ivyDb } from '../db/ivyDb';
 import { syncQueue } from './sync/syncQueue';
@@ -50,6 +77,12 @@ function resolveReplyReferences(msgs: Message[]): Message[] {
 }
 
 
+/** True when a stored message already matches what the server returned. */
+function sameStored(a: Message, b: Message): boolean {
+  return a.cipher === b.cipher && a.id === b.id && a.status === b.status && a.edited === b.edited &&
+    a.deleted === b.deleted && a.pinned === b.pinned && a.starred === b.starred && a.message_type === b.message_type;
+}
+
 /** Decrypt the private fields of a profile row. */
 async function openProfile(row: UserProfile): Promise<UserProfile> {
   return {
@@ -67,8 +100,17 @@ async function openProfile(row: UserProfile): Promise<UserProfile> {
  */
 async function toLocalMessage(item: any, existingLocal?: Message): Promise<Message> {
   const localUuid = item.local_uuid || item.id;
-  const content =
-    existingLocal && existingLocal.cipher === item.content ? existingLocal.content : await open(item.content);
+  let content: string;
+  if (existingLocal && existingLocal.cipher === item.content) {
+    content = existingLocal.content;
+  } else if (typeof item.content === 'string' && item.content.startsWith(FILE_PREFIX)) {
+    // Big files download in the background so they never hold up the chat
+    content = '';
+    pendingFiles.set(localUuid, item.content);
+    void drainPendingFiles();
+  } else {
+    content = await open(item.content);
+  }
   const isAudioData = content.startsWith('data:audio/');
   const resolvedType: MessageType = isAudioData ? 'voice' : (item.message_type || 'text');
 
@@ -82,8 +124,8 @@ async function toLocalMessage(item: any, existingLocal?: Message): Promise<Messa
     sender_id: item.sender_id,
     receiver_id: item.receiver_id || '',
     content,
-    // Remember the ciphertext only once decrypted, so failures are retried later
-    cipher: content === DECRYPT_FAILED ? undefined : item.content,
+    // Remember the ciphertext only once decrypted, so failures (and pending files) are retried later
+    cipher: content === DECRYPT_FAILED || content === '' ? undefined : item.content,
     message_type: resolvedType,
     reply_to: item.reply_to,
     edited: item.edited || false,
@@ -196,7 +238,8 @@ export class ChatService {
             for (const item of remoteMsgs) {
               const existingLocal = await ivyDb.messages.get(item.local_uuid || item.id);
               const msg = await toLocalMessage(item, existingLocal);
-              await ivyDb.messages.put(msg);
+              // Skip unchanged rows: rewriting every message on each load delays new sends
+              if (!existingLocal || !sameStored(existingLocal, msg)) await ivyDb.messages.put(msg);
             }
           }
 
@@ -269,14 +312,12 @@ export class ChatService {
       reactions: []
     };
 
-    // 1. Save to local IndexedDB immediately
-    await ivyDb.messages.put(newMessage);
-
-    // 2. Enqueue in SyncQueue
-    await syncQueue.enqueue('SEND_MESSAGE', newMessage as unknown as Record<string, unknown>);
-
-    // 3. Trigger queue processor in background
-    queueProcessor.processQueue();
+    // Save, queue and send in the background so the bubble appears instantly
+    void (async () => {
+      await ivyDb.messages.put(newMessage);
+      await syncQueue.enqueue('SEND_MESSAGE', newMessage as unknown as Record<string, unknown>);
+      queueProcessor.processQueue();
+    })().catch((err) => logger.error('Unable to queue message:', err));
 
     return newMessage;
   }
@@ -427,10 +468,26 @@ export class ChatService {
    */
   subscribeToRealtimeMessages(
     onMessageReceived: (msg: Message) => void,
-    onReactionsChanged: (msgs: Message[]) => void
+    onReactionsChanged: (msgs: Message[]) => void,
+    /** Called whenever we may have missed events (connected, reconnected, app resumed) */
+    onResync: () => void
   ): () => void {
     this.realtimeUnsubscribe?.();
     if (!supabase) return () => {};
+    let retryTimer: number | null = null;
+    let resyncTimer: number | null = null;
+    const resyncSoon = () => {
+      if (resyncTimer !== null) return;
+      resyncTimer = window.setTimeout(() => {
+        resyncTimer = null;
+        onResync();
+      }, 600);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') resyncSoon();
+    };
+    window.addEventListener('online', resyncSoon);
+    document.addEventListener('visibilitychange', onVisible);
 
     const channel = supabase
       .channel('public:messages_and_reactions')
@@ -465,9 +522,25 @@ export class ChatService {
           onReactionsChanged(await this.getMessages());
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        logger.info('Messages channel status:', status, err?.message || '');
+        if (status === 'SUBSCRIBED') {
+          // Anything sent while we were connecting never arrived as an event
+          resyncSoon();
+        } else if ((status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') && retryTimer === null) {
+          retryTimer = window.setTimeout(() => {
+            if (this.realtimeUnsubscribe === unsubscribe) {
+              this.subscribeToRealtimeMessages(onMessageReceived, onReactionsChanged, onResync);
+            }
+          }, 2000);
+        }
+      });
 
     const unsubscribe = () => {
+      window.removeEventListener('online', resyncSoon);
+      document.removeEventListener('visibilitychange', onVisible);
+      if (retryTimer !== null) clearTimeout(retryTimer);
+      if (resyncTimer !== null) clearTimeout(resyncTimer);
       if (supabase && channel) {
         supabase.removeChannel(channel);
       }

@@ -11,7 +11,7 @@ export class ConflictResolver {
     const localMsg = await ivyDb.messages.get(localUuid);
     if (localMsg) {
       localMsg.id = serverId; // Link server UUID
-      localMsg.status = localMsg.status === 'Queued' || localMsg.status === 'Sending' ? 'Sent' : localMsg.status;
+      localMsg.status = ['Queued', 'Sending', 'Failed', 'Retrying'].includes(localMsg.status) ? 'Sent' : localMsg.status;
       await ivyDb.messages.put(localMsg);
       logger.sync(`Reconciled message local_uuid: ${localUuid} -> server_id: ${serverId}`);
     }
