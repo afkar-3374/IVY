@@ -43,7 +43,11 @@ export class CallService {
   async loadIceServers(): Promise<void> {
     if (!supabase || Date.now() < this.iceServersExpireAt) return;
     try {
-      const { data, error } = await supabase.functions.invoke('turn-credentials');
+      // Never let a slow network hold up a call: fall back to direct connections after 4s
+      const { data, error } = await Promise.race([
+        supabase.functions.invoke('turn-credentials'),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TURN credentials timed out')), 4000)),
+      ]);
       if (error) throw error;
       const relays = (data?.iceServers ?? []) as RTCIceServer[];
       if (relays.length > 0) {
