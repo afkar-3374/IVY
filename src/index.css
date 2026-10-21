@@ -298,3 +298,10 @@
 .dark .wa-header { background: #202c33; }
 .wa-input { background: #ffffff; }
 .dark .wa-input { background: #2a3942; color: #e9edef; }
+
+/* Jump-to-message flash across the whole row */
+.wa-flash { animation: wa-flash 1.6s ease-out; clip-path: inset(0 -100vmax); }
+@keyframes wa-flash {
+  0%, 40% { box-shadow: 0 0 0 100vmax rgba(224, 90, 116, 0.18); background-color: rgba(224, 90, 116, 0.18); }
+  100% { box-shadow: 0 0 0 100vmax rgba(224, 90, 116, 0); background-color: rgba(224, 90, 116, 0); }
+}

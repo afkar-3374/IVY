@@ -44,7 +44,7 @@ export const AppRouter: React.FC = () => {
         </Route>
 
         {/* Catch-all redirect */}
-        <Route path="*" element={<Navigate to="/us" replace />} />
+        <Route path="*" element={<Navigate to="/chat" replace />} />
       </Routes>
     </Suspense>
   );

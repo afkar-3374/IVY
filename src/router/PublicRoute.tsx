@@ -6,7 +6,7 @@ export const PublicRoute: React.FC = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated && state.isUnlocked);
 
   if (isAuthenticated) {
-    return <Navigate to="/us" replace />;
+    return <Navigate to="/chat" replace />;
   }
 
   return <Outlet />;

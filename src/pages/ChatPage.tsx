@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -22,6 +22,8 @@ import {
   Lock,
   Pin,
   SendHorizontal,
+  ChevronLeft,
+  ChevronUp,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useChatStore } from '../store/useChatStore';
@@ -72,6 +74,14 @@ const ChatPage: React.FC = () => {
   const [isRecordingPaused, setIsRecordingPaused] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
+  // Search inside the chat
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchIndex, setSearchIndex] = useState(0);
+  // Hold-to-record: finger on the mic; slide left to cancel, up to lock
+  const [isHoldingMic, setIsHoldingMic] = useState(false);
+  const [slideOffset, setSlideOffset] = useState(0);
+  const holdRef = useRef<{ x: number; y: number; at: number; state: 'idle' | 'holding' | 'locked' }>({ x: 0, y: 0, at: 0, state: 'idle' });
 
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const animFrameRef = useRef<number | null>(null);
@@ -278,10 +288,11 @@ const ChatPage: React.FC = () => {
     const el = document.getElementById(`msg-${localUuid}`);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.classList.add('ring-2', 'ring-[#C95565]', 'ring-offset-2', 'rounded-3xl', 'transition-all');
-      setTimeout(() => {
-        el.classList.remove('ring-2', 'ring-[#C95565]', 'ring-offset-2', 'rounded-3xl', 'transition-all');
-      }, 2000);
+      // WhatsApp-style flash across the whole row
+      el.classList.remove('wa-flash');
+      void el.offsetWidth;
+      el.classList.add('wa-flash');
+      setTimeout(() => el.classList.remove('wa-flash'), 1800);
     } else {
       setTargetMessageId(localUuid);
     }
@@ -296,6 +307,35 @@ const ChatPage: React.FC = () => {
     }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length, targetMessageId]);
+
+  const searchTerm = searchQuery.trim().toLowerCase();
+  const searchMatches = useMemo(
+    () =>
+      searchTerm
+        ? messages.filter((m) => m.message_type === 'text' && !m.deleted && m.content.toLowerCase().includes(searchTerm)).map((m) => m.local_uuid)
+        : [],
+    [messages, searchTerm]
+  );
+
+  // A new search starts from the most recent match
+  useEffect(() => {
+    if (searchMatches.length === 0) return;
+    const last = searchMatches.length - 1;
+    setSearchIndex(last);
+    jumpToOriginalMessage(searchMatches[last]);
+  }, [searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const stepSearch = (dir: -1 | 1) => {
+    if (searchMatches.length === 0) return;
+    const next = Math.min(searchMatches.length - 1, Math.max(0, searchIndex + dir));
+    setSearchIndex(next);
+    jumpToOriginalMessage(searchMatches[next]);
+  };
+
+  const closeSearch = () => {
+    setIsSearchOpen(false);
+    setSearchQuery('');
+  };
 
   // Grow the message box with its text (up to ~6 lines), like WhatsApp
   useEffect(() => {
@@ -340,7 +380,7 @@ const ChatPage: React.FC = () => {
   };
 
   // Start Voice Note Recording
-  const startRecording = async () => {
+  const startRecording = async (): Promise<boolean> => {
     try {
       await voiceRecorder.start();
       setIsRecordingVoice(true);
@@ -356,8 +396,10 @@ const ChatPage: React.FC = () => {
         animFrameRef.current = requestAnimationFrame(updateAudioLevel);
       };
       animFrameRef.current = requestAnimationFrame(updateAudioLevel);
+      return true;
     } catch (err: any) {
       addToast(err.message || 'Microphone access is required to record voice notes.', 'error');
+      return false;
     }
   };
 
@@ -385,7 +427,7 @@ const ChatPage: React.FC = () => {
   };
 
   // Cancel Voice Note Recording
-  const cancelRecording = () => {
+  const cancelRecording = (silent = false) => {
     voiceRecorder.cancel();
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
@@ -393,7 +435,72 @@ const ChatPage: React.FC = () => {
     setIsRecordingPaused(false);
     setRecordingSeconds(0);
     setAudioLevel(0);
-    addToast('Voice recording cancelled', 'info');
+    if (!silent) addToast('Voice recording cancelled', 'info');
+  };
+
+  const SLIDE_CANCEL_PX = 110;
+  const SLIDE_LOCK_PX = 80;
+  const MIN_HOLD_MS = 600;
+
+  // The click that follows lifting the finger after a hold must not count as a tap
+  const holdGestureRef = useRef(false);
+  const holdEndedAtRef = useRef(0);
+
+  const endHold = () => {
+    holdRef.current.state = 'idle';
+    setIsHoldingMic(false);
+    setSlideOffset(0);
+  };
+
+  const onMicPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (hasText || isRecordingVoice || e.button !== 0) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    holdRef.current = { x: e.clientX, y: e.clientY, at: Date.now(), state: 'holding' };
+    holdGestureRef.current = true;
+    setIsHoldingMic(true);
+    navigator.vibrate?.(20);
+    void startRecording().then((ok) => {
+      if (!ok) endHold();
+      // Let go (or slid away) before the microphone was ready
+      else if (holdRef.current.state === 'idle') cancelRecording(true);
+    });
+  };
+
+  const onMicPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const hold = holdRef.current;
+    if (hold.state !== 'holding') return;
+    const dx = e.clientX - hold.x;
+    const dy = e.clientY - hold.y;
+    setSlideOffset(Math.min(0, dx));
+    if (dx < -SLIDE_CANCEL_PX) {
+      endHold();
+      navigator.vibrate?.(30);
+      cancelRecording(true);
+    } else if (dy < -SLIDE_LOCK_PX) {
+      // Locked: keeps recording hands-free, with delete / pause / send
+      hold.state = 'locked';
+      setIsHoldingMic(false);
+      setSlideOffset(0);
+      navigator.vibrate?.(15);
+    }
+  };
+
+  const onMicPointerUp = () => {
+    if (holdGestureRef.current) {
+      holdGestureRef.current = false;
+      holdEndedAtRef.current = Date.now();
+    }
+    const hold = holdRef.current;
+    if (hold.state !== 'holding') return;
+    const heldFor = Date.now() - hold.at;
+    endHold();
+    if (heldFor < MIN_HOLD_MS) {
+      if (isRecordingVoice) cancelRecording(true);
+      addToast('Hold to record, release to send', 'info');
+    } else if (isRecordingVoice) {
+      void stopAndSendVoiceNote();
+    }
   };
 
   // Stop & Send Voice Note
@@ -517,7 +624,46 @@ const ChatPage: React.FC = () => {
         </div>
       )}
 
-      {/* Header */}
+      {/* Header (or the search bar while searching) */}
+      {isSearchOpen ? (
+        <header className="wa-header sticky top-0 z-30 px-1 py-2 flex items-center gap-1 flex-shrink-0 shadow-[0_1px_0_rgba(11,20,26,0.08)]">
+          <button onClick={closeSearch} aria-label="Close search" className="p-2 rounded-full text-[#54656f] dark:text-[#aebac1] active:bg-black/5">
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+          <input
+            autoFocus
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') closeSearch();
+              if (e.key === 'Enter') stepSearch(e.shiftKey ? 1 : -1);
+            }}
+            placeholder="Search…"
+            className="flex-1 min-w-0 bg-transparent text-[16px] text-[#111b21] dark:text-[#e9edef] placeholder:text-[#8696a0] focus:outline-none px-1"
+          />
+          {searchTerm && (
+            <span className="text-[13px] text-[#667781] dark:text-[#8696a0] tabular-nums whitespace-nowrap px-1">
+              {searchMatches.length ? `${searchIndex + 1} of ${searchMatches.length}` : 'No results'}
+            </span>
+          )}
+          <button
+            onClick={() => stepSearch(-1)}
+            disabled={searchIndex <= 0}
+            aria-label="Older match"
+            className="p-2 rounded-full text-[#54656f] dark:text-[#aebac1] disabled:opacity-30"
+          >
+            <ChevronUp className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => stepSearch(1)}
+            disabled={searchIndex >= searchMatches.length - 1}
+            aria-label="Newer match"
+            className="p-2 rounded-full text-[#54656f] dark:text-[#aebac1] disabled:opacity-30"
+          >
+            <ChevronDown className="w-5 h-5" />
+          </button>
+        </header>
+      ) : (
       <header className="wa-header sticky top-0 z-30 pl-1 pr-1.5 sm:pl-3 py-2 flex items-center justify-between flex-shrink-0 shadow-[0_1px_0_rgba(11,20,26,0.08)] dark:shadow-[0_1px_0_rgba(255,255,255,0.04)]">
         <div className="flex items-center min-w-0 flex-1">
           <button
@@ -575,8 +721,8 @@ const ChatPage: React.FC = () => {
             <Phone className="w-5 h-5" />
           </button>
           <button
-            onClick={() => navigate('/search')}
-            className="hidden sm:block p-2.5 rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+            onClick={() => setIsSearchOpen(true)}
+            className="p-2.5 rounded-full active:bg-black/5 hover:bg-black/5 dark:hover:bg-white/5"
             title="Search messages"
             aria-label="Search messages"
           >
@@ -592,6 +738,7 @@ const ChatPage: React.FC = () => {
           </button>
         </div>
       </header>
+      )}
 
       {/* Pinned Messages Bar */}
       {pinnedMessages.length > 0 && (
@@ -682,6 +829,7 @@ const ChatPage: React.FC = () => {
                 onJumpToOriginal={jumpToOriginalMessage}
                 isFirstInGroup={isFirstInGroup}
                 isLastInGroup={isLastInGroup}
+                highlight={isSearchOpen && searchMatches.includes(msg.local_uuid) ? searchTerm : undefined}
               />
             </React.Fragment>
           );
@@ -798,12 +946,27 @@ const ChatPage: React.FC = () => {
               </div>
             )}
 
-            {isRecordingVoice ? (
-              /* Live voice note recording */
+            {isHoldingMic ? (
+              /* Holding the mic: slide left to cancel */
+              <div className="flex items-center gap-3 h-12 pl-4 pr-3 overflow-hidden">
+                <Mic className="w-5 h-5 text-red-500 animate-pulse flex-shrink-0" />
+                <span className="text-[15px] tabular-nums text-[#54656f] dark:text-[#d1d7db] w-11">{formatTimer(recordingSeconds)}</span>
+                <span
+                  className="flex-1 flex items-center justify-center gap-1 text-[14px] text-[#8696a0] whitespace-nowrap"
+                  style={{ transform: `translateX(${slideOffset}px)`, opacity: 1 - Math.min(1, -slideOffset / SLIDE_CANCEL_PX) * 0.7 }}
+                >
+                  <ChevronLeft className="w-4 h-4" /> Slide to cancel
+                </span>
+              </div>
+            ) : isRecordingVoice ? (
+              /* Locked: recording hands-free */
               <div className="flex items-center gap-2 h-12 pl-2 pr-3">
                 <button
                   type="button"
-                  onClick={cancelRecording}
+                  onClick={() => {
+                    holdRef.current.state = 'idle';
+                    cancelRecording();
+                  }}
                   className="p-2 rounded-full text-[#8696a0] hover:text-rose-500"
                   title="Discard recording"
                   aria-label="Discard recording"
@@ -896,22 +1059,48 @@ const ChatPage: React.FC = () => {
             )}
           </div>
 
-          {/* One round button: mic when empty, send while typing or recording */}
+          {/* Slide up to lock (shown while holding the mic) */}
+          <AnimatePresence>
+            {isHoldingMic && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 12 }}
+                className="absolute right-1 bottom-[68px] w-10 py-2.5 rounded-full bg-white dark:bg-[#233138] shadow-[0_1px_4px_rgba(11,20,26,0.25)] flex flex-col items-center gap-1 text-[#8696a0] pointer-events-none"
+              >
+                <Lock className="w-4 h-4" />
+                <ChevronUp className="w-4 h-4 animate-bounce" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* One round button: send while typing; otherwise hold to record a voice note */}
           <motion.button
             type="button"
             onClick={(e) => {
-              if (isRecordingVoice) void stopAndSendVoiceNote();
+              if (Date.now() - holdEndedAtRef.current < 500) return;
+              if (isRecordingVoice && !isHoldingMic) void stopAndSendVoiceNote();
               else if (hasText) void handleSend(e);
-              else void startRecording();
+              // keyboard users: start a locked recording
+              else if (e.detail === 0 && !isRecordingVoice) {
+                holdRef.current.state = 'locked';
+                void startRecording();
+              }
             }}
+            onPointerDown={onMicPointerDown}
+            onPointerMove={onMicPointerMove}
+            onPointerUp={onMicPointerUp}
+            onPointerCancel={onMicPointerUp}
+            onContextMenu={(e) => e.preventDefault()}
             // keep the keyboard open after sending, like WhatsApp
             onMouseDown={(e) => hasText && e.preventDefault()}
-            whileTap={{ scale: 0.9 }}
-            className="w-12 h-12 rounded-full bg-[#E05A74] hover:bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-[0_1px_3px_rgba(11,20,26,0.25)]"
-            title={isRecordingVoice ? 'Send voice note' : hasText ? 'Send' : 'Record voice note'}
-            aria-label={isRecordingVoice ? 'Send voice note' : hasText ? 'Send' : 'Record voice note'}
+            animate={{ scale: isHoldingMic ? 1.45 : 1 }}
+            whileTap={hasText ? { scale: 0.9 } : undefined}
+            className="touch-none select-none [-webkit-touch-callout:none] w-12 h-12 rounded-full bg-[#E05A74] hover:bg-[#C95565] text-white flex items-center justify-center flex-shrink-0 shadow-[0_1px_3px_rgba(11,20,26,0.25)]"
+            title={isRecordingVoice && !isHoldingMic ? 'Send voice note' : hasText ? 'Send' : 'Hold to record a voice note'}
+            aria-label={isRecordingVoice && !isHoldingMic ? 'Send voice note' : hasText ? 'Send' : 'Hold to record a voice note'}
           >
-            {isRecordingVoice || hasText ? (
+            {(isRecordingVoice && !isHoldingMic) || hasText ? (
               editingMessage ? <Check className="w-6 h-6" /> : <SendHorizontal className="w-[22px] h-[22px] ml-0.5" />
             ) : (
               <Mic className="w-6 h-6" />

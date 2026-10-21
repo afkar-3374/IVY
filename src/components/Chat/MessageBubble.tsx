@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useMotionValue, useTransform } from 'framer-motion';
 import {
   Check,
   CheckCheck,
@@ -25,6 +25,7 @@ import {
   File,
   Download,
   ChevronDown,
+  Reply,
 } from 'lucide-react';
 import type { Message } from '../../types';
 import { formatMessageTime } from '../../utils/date';
@@ -45,6 +46,25 @@ interface MessageBubbleProps {
   /** First/last of a run of messages from the same person (shapes the bubble corners) */
   isFirstInGroup?: boolean;
   isLastInGroup?: boolean;
+  /** Search term to highlight in the text */
+  highlight?: string;
+}
+
+/** Wrap each case-insensitive match of `term` in a highlight. */
+function highlightText(text: string, term?: string): React.ReactNode {
+  if (!term) return text;
+  const lower = text.toLowerCase();
+  const parts: React.ReactNode[] = [];
+  let from = 0;
+  let at = lower.indexOf(term);
+  while (at !== -1) {
+    if (at > from) parts.push(text.slice(from, at));
+    parts.push(<mark key={at} className="bg-[#ffe066] text-inherit rounded-sm">{text.slice(at, at + term.length)}</mark>);
+    from = at + term.length;
+    at = lower.indexOf(term, from);
+  }
+  parts.push(text.slice(from));
+  return parts;
 }
 
 /** 1–3 emoji and nothing else: shown big, without a bubble. */
@@ -78,6 +98,13 @@ function useLongPress(onLongPress: () => void) {
         timer.current = setTimeout(() => {
           timer.current = null;
           navigator.vibrate?.(25);
+          // Lifting the finger would "click" whatever menu button opened under it
+          const swallow = (ev: Event) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+          };
+          window.addEventListener('click', swallow, { capture: true, once: true });
+          setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 800);
           onLongPress();
         }, LONG_PRESS_MS);
       },
@@ -100,6 +127,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   onRetry,
   onJumpToOriginal,
   isFirstInGroup = true,
+  highlight,
 }) => {
   const currentUser = useAuthStore((state) => state.user);
   const isMine = currentUser ? isMessageFromUser(message, currentUser.id) : false;
@@ -130,6 +158,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     currentUser && message.reactions?.some((r) => r.profile_id === currentUser.id)
   );
   const longPress = useLongPress(() => onLongPress(message));
+  // Swipe right to reply: a reply arrow fades in as the bubble slides
+  const dragX = useMotionValue(0);
+  const replyIconOpacity = useTransform(dragX, [6, 34], [0, 1]);
+  const replyIconScale = useTransform(dragX, [6, 34], [0.4, 1]);
 
   const getReplyIcon = (type?: string) => {
     if (type === 'voice') return <Mic className="w-3 h-3 text-[#C95565]" />;
@@ -261,6 +293,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const meta = (
     <>
+      {message.pinned && <Pin className="w-3 h-3" />}
+      {message.starred && <Star className="w-3 h-3 fill-current" />}
       {message.edited && <span>edited</span>}
       <span>{formatMessageTime(message.created_at)}</span>
       {renderStatus()}
@@ -273,9 +307,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       initial={isFresh ? { opacity: 0, y: 6 } : false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.18, ease: 'easeOut' }}
+      style={{ x: dragX }}
       drag={onSwipeToReply ? 'x' : false}
+      dragDirectionLock
       dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={{ left: 0, right: 0.5 }}
+      dragElastic={{ left: 0, right: 0.8 }}
       dragSnapToOrigin
       onDragStart={longPress.cancel}
       onDragEnd={(_, info) => {
@@ -292,6 +328,16 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         isMine ? 'ml-auto items-end mr-2' : 'mr-auto items-start ml-2'
       } ${isFirstInGroup ? 'mt-2.5' : 'mt-[3px]'} ${hasReactions ? 'mb-4' : ''}`}
     >
+      {onSwipeToReply && (
+        <motion.span
+          style={{ opacity: replyIconOpacity, scale: replyIconScale }}
+          className="absolute top-1/2 -mt-4 -left-9 w-8 h-8 rounded-full bg-black/20 dark:bg-white/10 text-white flex items-center justify-center pointer-events-none"
+          aria-hidden
+        >
+          <Reply className="w-4 h-4" />
+        </motion.span>
+      )}
+
       {/* Main Bubble Container: press and hold for the menu, like WhatsApp */}
       <div
         {...longPress.handlers}
@@ -314,14 +360,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           >
             <ChevronDown className="w-4 h-4" />
           </button>
-        )}
-
-        {/* Pinned / Starred */}
-        {(message.pinned || message.starred) && (
-          <div className="flex items-center gap-1 text-[11px] text-[#667781] dark:text-[#8696a0] mb-0.5">
-            {message.pinned && <Pin className="w-3 h-3" />}
-            {message.starred && <Star className="w-3 h-3 fill-current" />}
-          </div>
         )}
 
         {/* Reply Reference Preview Card */}
@@ -421,8 +459,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         ) : (
           /* Text Content (the invisible spacer keeps the time from overlapping the last line) */
           <span className="whitespace-pre-wrap break-words">
-            {message.content}
-            <span className={`inline-block ${isMine ? 'w-[70px]' : 'w-[50px]'} ${message.edited ? 'pl-10' : ''}`} aria-hidden />
+            {highlightText(message.content, highlight)}
+            <span
+              className="inline-block"
+              style={{ width: (isMine ? 70 : 50) + (message.edited ? 40 : 0) + (message.starred ? 16 : 0) + (message.pinned ? 16 : 0) }}
+              aria-hidden
+            />
           </span>
         )}
 
