@@ -53,6 +53,40 @@ export const DAILY_QUESTIONS = [
   'What do you want our love to feel like in ten years?',
 ];
 
+/** Daily doodle prompts: both draw, then see each other's drawing. */
+export const DOODLE_PROMPTS = [
+  'Draw us on our dream date',
+  'Draw your favourite food',
+  'Draw me as an animal',
+  'Draw how you feel today',
+  'Draw our future home',
+  'Draw the place we first talked',
+  'Draw a gift you want to give me',
+  'Draw yourself as a superhero',
+  'Draw our perfect holiday',
+  'Draw what you are doing right now',
+  'Draw my smile',
+  'Draw a flower for me',
+  'Draw your favourite thing about me',
+  'Draw us in ten years',
+  'Draw the weather in your heart',
+  'Draw our pet (real or imaginary)',
+  'Draw a secret handshake for us',
+  'Draw your dream car',
+  'Draw a monster that hates hugs',
+  'Draw our wedding cake',
+  'Draw a meal you want to cook for me',
+  'Draw me sleeping',
+  'Draw the moon and something sweet',
+  'Draw a love letter envelope',
+  'Draw your happy place',
+  'Draw a funny face',
+  'Draw a heart in a new way',
+  'Draw our song as a picture',
+  'Draw what you want for your birthday',
+  'Draw a tiny world just for us',
+];
+
 export interface WouldYouRather {
   a: string;
   b: string;

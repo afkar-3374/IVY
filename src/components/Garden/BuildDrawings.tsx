@@ -262,6 +262,69 @@ export const DRAWINGS: Record<string, React.FC<{ night: boolean }>> = {
       {night && <Glow x={0} y={-8} r={14} night />}
     </g>
   ),
+  mushrooms: ({ night }) => (
+    <g>
+      {[[-6, 0, 1], [0.5, 1, 0.75], [6, 0, 1.1], [-2.5, 1.6, 0.6], [3.4, 1.8, 0.55]].map(([x, y, sc], i) => (
+        <g key={i} transform={`translate(${x} ${y}) scale(${sc})`}>
+          {night && <circle cx="0" cy="-3.6" r="3.6" fill="url(#warmGlow)" className="twinkle" style={{ animationDelay: `${i * 0.4}s` }} />}
+          <rect x="-0.8" y="-3" width="1.6" height="3" rx="0.6" fill="#FFF4E6" />
+          <path d="M-3.2 -2.8 Q -3 -6.6 0 -6.8 Q 3 -6.6 3.2 -2.8 Z" fill={night ? '#FF6F91' : '#E8455F'} />
+          <circle cx="-1.4" cy="-4.6" r="0.55" fill="#fff" />
+          <circle cx="1.2" cy="-5.4" r="0.45" fill="#fff" />
+          <circle cx="1.8" cy="-3.7" r="0.4" fill="#fff" />
+        </g>
+      ))}
+    </g>
+  ),
+  bunnies: () => {
+    const Bunny: React.FC<{ x: number; flip?: boolean }> = ({ x, flip }) => (
+      <g transform={`translate(${x} 0) scale(${flip ? -1 : 1} 1)`} stroke="#E5DCE8" strokeWidth="0.25">
+        <circle cx="-3" cy="-2.6" r="0.9" fill="#fff" />
+        <ellipse cx="0" cy="-2.2" rx="3" ry="2.2" fill="#fff" />
+        <ellipse cx="2" cy="-7.4" rx="0.6" ry="1.9" fill="#fff" />
+        <ellipse cx="3.1" cy="-7.2" rx="0.6" ry="1.9" fill="#fff" transform="rotate(18 3.1 -7.2)" />
+        <circle cx="2.4" cy="-4.7" r="1.7" fill="#fff" />
+        <ellipse cx="2" cy="-7.3" rx="0.25" ry="1.2" fill="#FFC2D2" stroke="none" />
+        <circle cx="3.2" cy="-4.9" r="0.32" fill="#3A2E35" stroke="none" />
+        <circle cx="3.9" cy="-4.2" r="0.28" fill="#F48AA0" stroke="none" />
+      </g>
+    );
+    return (
+      <g>
+        <Bunny x={-4} />
+        <Bunny x={4} flip />
+        <Heart x={0} y={-8.5} s={0.55} fill="#F27A93" />
+      </g>
+    );
+  },
+  hammock: () => (
+    <g>
+      {[-9, 9].map((x) => (
+        <g key={x}>
+          <rect x={x - 0.6} y="-12" width="1.2" height="12" fill="url(#wood)" />
+          <circle cx={x} cy="-14.5" r="4.2" fill="url(#foliage)" />
+          <circle cx={x - 1.4} cy="-15.6" r="1.4" fill="#fff" opacity="0.2" />
+        </g>
+      ))}
+      <path d="M-8.4 -8 Q 0 -1.5 8.4 -8" stroke="#F27A93" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+      <path d="M-8 -7.6 Q 0 -2.8 8 -7.6" stroke="#FFD3DF" strokeWidth="0.5" fill="none" />
+      <Heart x={-3} y={-5.6} s={0.5} fill="#E0335E" />
+    </g>
+  ),
+  telescope: ({ night }) => (
+    <g>
+      <path d="M0 -7 L -4 0 M 0 -7 L 4 0 M 0 -7 L 0.4 0" stroke="#5A4A6B" strokeWidth="0.7" strokeLinecap="round" />
+      <g transform="rotate(-32 0 -7)">
+        <rect x="-6" y="-8.6" width="11" height="3.2" rx="1.2" fill="#8E7CC3" />
+        <rect x="4.2" y="-9.1" width="1.8" height="4.2" rx="0.6" fill="#5A4A6B" />
+        <rect x="-5" y="-8.2" width="6" height="0.7" rx="0.35" fill="#fff" opacity="0.45" />
+      </g>
+      {night &&
+        [[6, -15], [9, -12], [4, -18]].map(([x, y], i) => (
+          <circle key={i} cx={x} cy={y} r="0.5" fill="#FFF8E6" className="twinkle" style={{ animationDelay: `${i * 0.5}s` }} />
+        ))}
+    </g>
+  ),
 };
 
 /** viewBox for each drawing when shown on its own (shop thumbnails). */
@@ -281,4 +344,8 @@ export const PREVIEW_BOX: Record<string, string> = {
   windmill: '-12 -30 24 31',
   cottage: '-15 -27 30 28',
   gazebo: '-13 -27 26 28',
+  mushrooms: '-10 -9 20 11',
+  bunnies: '-9 -12 18 13',
+  hammock: '-14 -20 28 21',
+  telescope: '-8 -19 18 20',
 };

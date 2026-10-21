@@ -217,7 +217,18 @@
 .rainbow { animation: rainbow-in 2.4s ease-out both; }
 @keyframes rainbow-in { from { opacity: 0; } to { opacity: 0.5; } }
 
+/* Garden weather */
+.snow { animation: snow 9s linear infinite; }
+@keyframes snow {
+  from { transform: translate(0, 0); }
+  50% { transform: translate(4px, 55px); }
+  to { transform: translate(-2px, 110px); }
+}
+.rain { animation: rain 1s linear infinite; }
+@keyframes rain { from { transform: translate(0, 0); } to { transform: translate(-30px, 110px); } }
+
 @media (prefers-reduced-motion: reduce) {
+  .snow, .rain,
   .aurora-blob, .sway, .breathe, .rise, .twinkle, .drift, .rays, .shooting-star, .cloud, .petal-fall, .text-gradient, .petal, .flutter, .flap, .rainbow { animation: none !important; }
   .bloom { animation-duration: 0.01ms !important; }
 }

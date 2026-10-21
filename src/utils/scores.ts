@@ -82,7 +82,7 @@ export const SOURCE_LABELS: Record<PointSource, string> = {
   tap: '💗 Love taps',
   hug: '🤗 Hugs',
   daily_question: '💭 Daily question',
-  know_me: '🧠 Know me', // retired game, kept for old points
+  know_me: '🎨 Daily doodle', // the doodle uses the old quiz's slot
   would_you_rather: '🤔 Would you rather',
   tic_tac_toe: '❤️ Tic-tac-toe',
   garden: '🌱 Garden care',

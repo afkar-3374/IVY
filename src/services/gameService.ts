@@ -3,7 +3,8 @@ import { logger } from './logger/logger';
 import { seal, open } from './crypto/coupleCrypto';
 
 export type PointSource = 'tap' | 'hug' | 'daily_question' | 'know_me' | 'would_you_rather' | 'tic_tac_toe' | 'garden';
-export type DailyGame = 'daily_question' | 'would_you_rather';
+// 'know_me' is the database slot the daily doodle uses (the old quiz is gone)
+export type DailyGame = 'daily_question' | 'know_me' | 'would_you_rather';
 
 export interface PointRow {
   id: string;

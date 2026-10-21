@@ -4,6 +4,19 @@ import { GARDEN_ITEMS, type GardenItem } from '../../data/gardenItems';
 import { BuildDefs, DRAWINGS } from './BuildDrawings';
 
 export type Phase = 'day' | 'sunset' | 'night';
+export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
+export type Weather = 'clear' | 'cloudy' | 'rain';
+
+/** Season from the month, and the day's weather (the same on both phones). */
+export function gardenWeather(date: Date, dayIndex: number): { season: Season; weather: Weather; label: string } {
+  const m = date.getMonth();
+  const season: Season = m >= 2 && m <= 4 ? 'spring' : m >= 5 && m <= 7 ? 'summer' : m >= 8 && m <= 10 ? 'autumn' : 'winter';
+  const roll = seeded(dayIndex + 4242);
+  const weather: Weather = roll < 0.2 ? 'rain' : roll < 0.45 ? 'cloudy' : 'clear';
+  const seasonLabel = { spring: '🌸 Spring', summer: '☀️ Summer', autumn: '🍂 Autumn', winter: '❄️ Winter' }[season];
+  const weatherLabel = { clear: 'clear skies', cloudy: 'cloudy', rain: 'rainy day' }[weather];
+  return { season, weather, label: `${seasonLabel} · ${weatherLabel}` };
+}
 
 /** Deterministic pseudo-random numbers so the garden looks the same on both phones. */
 export function seeded(n: number): number {
@@ -112,6 +125,8 @@ interface GardenSceneProps {
   justBuilt: string | null;
   /** Both of you watered today */
   rainbow?: boolean;
+  season?: Season;
+  weather?: Weather;
 }
 
 const BUTTERFLY_COLOURS = ['#FF8FB0', '#C38BFF', '#FFC56B', '#7CD4F5'];
@@ -139,7 +154,7 @@ const PlacedItem: React.FC<{ item: GardenItem; night: boolean; isNew: boolean }>
 };
 
 /** The animated love garden. Purely visual; growth comes from `total` and `level`. */
-export const GardenScene: React.FC<GardenSceneProps> = ({ total, level, progress, phase, stars, watering, label, builds, justBuilt, rainbow }) => {
+export const GardenScene: React.FC<GardenSceneProps> = ({ total, level, progress, phase, stars, watering, label, builds, justBuilt, rainbow, season = 'summer', weather = 'clear' }) => {
   const [bursts, setBursts] = useState<Burst[]>([]);
   const night = phase === 'night';
   const sky = SKIES[phase];
@@ -192,7 +207,8 @@ export const GardenScene: React.FC<GardenSceneProps> = ({ total, level, progress
   );
 
   // More butterflies as the garden grows (daytime only)
-  const butterflies = night ? 0 : Math.min(6, 1 + Math.floor(level / 2));
+  const butterflies = night || weather === 'rain' || season === 'winter' ? 0 : Math.min(8, 1 + Math.floor(level / 2) + (season === 'summer' ? 2 : 0));
+  const overcast = weather !== 'clear';
 
   const treeScale = level <= 1 ? 0.22 : 0.26 + level * 0.04 + progress * 0.04;
   const risingHearts = Math.min(8, Math.max(0, level - 2));
@@ -274,7 +290,7 @@ export const GardenScene: React.FC<GardenSceneProps> = ({ total, level, progress
           </>
         ) : (
           <>
-            <g transform={`translate(126 ${phase === 'sunset' ? 50 : 22})`}>
+            <g transform={`translate(126 ${phase === 'sunset' ? 50 : 22})`} opacity={overcast ? 0.45 : 1}>
               <g className="rays" opacity="0.35">
                 {Array.from({ length: 12 }, (_, i) => (
                   <path key={i} d="M0 0 L -2 -30 L 2 -30 Z" fill="#FFF3C4" transform={`rotate(${i * 30})`} />
@@ -295,8 +311,21 @@ export const GardenScene: React.FC<GardenSceneProps> = ({ total, level, progress
           </>
         )}
 
+        {/* ── Weather clouds ── */}
+        {overcast &&
+          [[10, 14, 1.4], [62, 9, 1.2], [112, 16, 1.5], [150, 8, 1]].map(([x, y, sc], i) => (
+            <g key={`wc${i}`} className="cloud" style={{ animationDelay: `${-i * 18}s`, animationDuration: `${80 + i * 12}s` }}>
+              <g transform={`translate(${x - 20} ${y}) scale(${sc})`} opacity={night ? 0.35 : 0.9}>
+                <ellipse cx="0" cy="0" rx="12" ry="4" fill={weather === 'rain' ? '#9AA3B5' : '#E4E7EF'} />
+                <ellipse cx="5" cy="-2.6" rx="6.5" ry="3.8" fill={weather === 'rain' ? '#AEB6C6' : '#F1F3F8'} />
+                <ellipse cx="-5" cy="-1.6" rx="5" ry="3" fill={weather === 'rain' ? '#AEB6C6' : '#F1F3F8'} />
+              </g>
+            </g>
+          ))}
+        {weather === 'rain' && <rect width="160" height="100" fill="#3B4A63" opacity={night ? 0.15 : 0.18} />}
+
         {/* ── Rainbow on days you both watered ── */}
-        {rainbow && !night && (
+        {rainbow && !night && weather !== 'rain' && (
           <g className="rainbow" opacity="0.5">
             {['#FF6B8B', '#FFA26B', '#FFE07A', '#8FE3A0', '#7CC4F5', '#B48CFF'].map((c, i) => (
               <path key={c} d={`M${14 + i * 2.2} 70 A ${52 - i * 2.2} ${46 - i * 2.2} 0 0 1 ${118 - i * 2.2} 70`} stroke={c} strokeWidth="2.3" fill="none" />
@@ -377,13 +406,51 @@ export const GardenScene: React.FC<GardenSceneProps> = ({ total, level, progress
         ))}
 
         {/* ── Drifting petals ── */}
-        {level >= 4 &&
-          Array.from({ length: 6 }, (_, i) => (
+        {/* ── Season: falling leaves, snow, extra spring petals ── */}
+        {season === 'autumn' &&
+          Array.from({ length: 8 }, (_, i) => (
+            <path
+              key={`leaf${i}`}
+              d="M0 0 C 1.6 -1.6 3.4 -0.6 3 1 C 2.2 2.4 0.4 1.6 0 0 Z"
+              fill={['#F2A93B', '#E0703A', '#C9473A', '#F6C453'][i % 4]}
+              transform={`translate(${8 + i * 19} ${20 + (i % 3) * 8})`}
+              className="petal-fall"
+              style={{ animationDelay: `${i * 1.1}s`, animationDuration: `${9 + (i % 3) * 2}s` }}
+            />
+          ))}
+        {season === 'winter' &&
+          Array.from({ length: 36 }, (_, i) => (
+            <circle
+              key={`snow${i}`}
+              cx={seeded(i + 2000) * 160}
+              cy={-4}
+              r={0.35 + seeded(i + 2100) * 0.45}
+              fill="#fff"
+              opacity="0.9"
+              className="snow"
+              style={{ animationDelay: `${-seeded(i + 2200) * 10}s`, animationDuration: `${7 + seeded(i + 2300) * 6}s` }}
+            />
+          ))}
+        {weather === 'rain' &&
+          Array.from({ length: 50 }, (_, i) => (
+            <path
+              key={`rain${i}`}
+              d={`M${seeded(i + 2400) * 170} -6 l -1.2 4`}
+              stroke="#CFE3F7"
+              strokeWidth="0.35"
+              strokeLinecap="round"
+              opacity="0.8"
+              className="rain"
+              style={{ animationDelay: `${-seeded(i + 2500) * 1.2}s`, animationDuration: `${0.7 + seeded(i + 2600) * 0.5}s` }}
+            />
+          ))}
+        {(level >= 4 || season === 'spring') &&
+          Array.from({ length: season === 'spring' ? 12 : 6 }, (_, i) => (
             <path
               key={i}
               d="M0 0 C 1.2 -1 2.4 0 1.2 1.4 C 0 2 -1 1 0 0 Z"
               fill="#FFB3C6"
-              transform={`translate(${20 + i * 22} ${30 + (i % 3) * 6})`}
+              transform={`translate(${(20 + i * 22) % 160} ${30 + (i % 3) * 6})`}
               className="petal-fall"
               style={{ animationDelay: `${i * 1.4}s`, animationDuration: `${8 + (i % 3) * 2}s` }}
             />

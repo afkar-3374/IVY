@@ -7,9 +7,9 @@ import { gardenLevel, sumBy, wateringStreak } from '../utils/scores';
 import { useCoupleStore } from '../store/useCoupleStore';
 import { usePresenceStore } from '../store/usePresenceStore';
 import { Avatar } from '../components/ui/Avatar';
-import { todayKey } from '../data/gameQuestions';
+import { todayKey, dayIndex } from '../data/gameQuestions';
 import { cardClass } from '../components/Couple/CoupleCards';
-import { GardenScene, type Phase } from '../components/Garden/GardenScene';
+import { GardenScene, gardenWeather, type Phase } from '../components/Garden/GardenScene';
 import { Reveal } from '../components/ui/Reveal';
 import { BuildShop } from '../components/Garden/BuildShop';
 
@@ -41,6 +41,7 @@ const GardenPage: React.FC = () => {
   const total = sumBy(points);
   const { current, next, progress } = gardenLevel(total);
   const today = todayKey();
+  const { season, weather, label: weatherLabel } = gardenWeather(new Date(), dayIndex());
   const iWatered = points.some((p) => p.user_id === me?.id && p.ref === `garden:${today}`);
   const theyWatered = points.some((p) => p.user_id === partner.id && p.ref === `garden:${today}`);
   const bothWatered = iWatered && theyWatered;
@@ -114,6 +115,8 @@ const GardenPage: React.FC = () => {
             builds={builds.map((b) => b.item)}
             justBuilt={justBuilt}
             rainbow={bothWatered}
+            season={season}
+            weather={weather}
             label={`Garden level ${current.level}: ${current.name}`}
           />
           {/* glass sheen */}
@@ -121,6 +124,9 @@ const GardenPage: React.FC = () => {
 
           <div className="absolute top-3 left-3 glass rounded-full px-3.5 py-1.5 text-xs font-semibold text-stone-700 dark:text-stone-100 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-[#E05A74]" /> Level {current.level} · {current.name}
+          </div>
+          <div className="absolute top-12 left-3 glass rounded-full px-3 py-1 text-[11px] font-medium text-stone-600 dark:text-stone-200">
+            {weatherLabel}
           </div>
           {/* You two: tap to send a love tap */}
           <button
