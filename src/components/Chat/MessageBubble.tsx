@@ -34,6 +34,8 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { useCallStore } from '../../store/useCallStore';
 import { AudioPlayer } from './AudioPlayer';
 import { getFileCategory, getFileExtensionLabel } from '../../utils/fileIcons';
+import { URL_PATTERN, firstUrl } from '../../services/linkPreviewService';
+import { LinkPreviewCard } from './LinkPreviewCard';
 
 interface MessageBubbleProps {
   message: Message;
@@ -48,6 +50,33 @@ interface MessageBubbleProps {
   isLastInGroup?: boolean;
   /** Search term to highlight in the text */
   highlight?: string;
+  /** Photos shown together as one album (this message is the first) */
+  album?: Message[];
+}
+
+/** Text with tappable links (and search highlights). */
+function renderText(text: string, term?: string): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  let from = 0;
+  for (const match of text.matchAll(URL_PATTERN)) {
+    const at = match.index ?? 0;
+    if (at > from) parts.push(<React.Fragment key={`t${from}`}>{highlightText(text.slice(from, at), term)}</React.Fragment>);
+    parts.push(
+      <a
+        key={`l${at}`}
+        href={match[0]}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className="text-[#027eb5] dark:text-[#53bdeb] underline break-all"
+      >
+        {highlightText(match[0], term)}
+      </a>
+    );
+    from = at + match[0].length;
+  }
+  if (from < text.length) parts.push(<React.Fragment key={`t${from}`}>{highlightText(text.slice(from), term)}</React.Fragment>);
+  return parts;
 }
 
 /** Wrap each case-insensitive match of `term` in a highlight. */
@@ -128,6 +157,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   onJumpToOriginal,
   isFirstInGroup = true,
   highlight,
+  album,
 }) => {
   const currentUser = useAuthStore((state) => state.user);
   const isMine = currentUser ? isMessageFromUser(message, currentUser.id) : false;
@@ -431,6 +461,27 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               </div>
             </div>
           </div>
+        ) : album ? (
+          /* Album: 2×2 grid, "+N" on the last tile */
+          <div className="grid grid-cols-2 gap-[3px] w-64 max-w-full">
+            {album.slice(0, 4).map((m, i) => (
+              <div
+                key={m.local_uuid}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onMediaClick) onMediaClick(m);
+                }}
+                className="relative aspect-square rounded-[5px] overflow-hidden cursor-pointer bg-black/10"
+              >
+                <img src={m.content} alt="" className="w-full h-full object-cover" loading="lazy" draggable={false} />
+                {i === 3 && album.length > 4 && (
+                  <div className="absolute inset-0 bg-black/45 flex items-center justify-center text-white text-2xl font-medium">
+                    +{album.length - 4}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         ) : isImageMsg && !message.deleted ? (
           /* Image Content */
           <div
@@ -459,7 +510,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         ) : (
           /* Text Content (the invisible spacer keeps the time from overlapping the last line) */
           <span className="whitespace-pre-wrap break-words">
-            {highlightText(message.content, highlight)}
+            {!message.deleted && firstUrl(message.content) && <LinkPreviewCard url={firstUrl(message.content)!} />}
+            {renderText(message.content, highlight)}
             <span
               className="inline-block"
               style={{ width: (isMine ? 70 : 50) + (message.edited ? 40 : 0) + (message.starred ? 16 : 0) + (message.pinned ? 16 : 0) }}

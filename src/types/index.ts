@@ -62,6 +62,9 @@ export interface Message {
   starred: boolean;
   forwarded: boolean;
   status: SyncStatus;
+  /** When it reached the partner's phone / when they read it */
+  delivered_at?: string;
+  read_at?: string;
   reactions?: MessageReaction[];
   attachments?: Attachment[];
   created_at: string;

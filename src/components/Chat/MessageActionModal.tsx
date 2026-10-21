@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Reply, Edit3, Trash2, Copy, Star, Pin, Plus, Share2 } from 'lucide-react';
+import { Reply, Edit3, Trash2, Copy, Star, Pin, Plus, Share2, Info } from 'lucide-react';
 import type { Message } from '../../types';
 import { QUICK_EMOJIS } from '../../utils/constants';
 
@@ -18,6 +18,7 @@ interface MessageActionModalProps {
   onForward?: () => void;
   onToggleStar: () => void;
   onTogglePin: () => void;
+  onInfo?: () => void;
 }
 
 export const MessageActionModal: React.FC<MessageActionModalProps> = ({
@@ -28,6 +29,7 @@ export const MessageActionModal: React.FC<MessageActionModalProps> = ({
   onReactionSelect,
   onOpenCustomEmojiPicker,
   onReply,
+  onInfo,
   onEdit,
   onDelete,
   onCopy,
@@ -170,6 +172,19 @@ export const MessageActionModal: React.FC<MessageActionModalProps> = ({
               <Pin className={`w-4 h-4 ${message.pinned ? 'text-[#C95565]' : 'text-stone-400'}`} />
               <span>{message.pinned ? 'Unpin' : 'Pin'}</span>
             </button>
+
+            {isMine && onInfo && (
+              <button
+                onClick={() => {
+                  onInfo();
+                  onClose();
+                }}
+                className="flex items-center gap-3 py-3 text-sm font-semibold text-stone-700 dark:text-stone-200 hover:text-[#C95565] transition-colors"
+              >
+                <Info className="w-4 h-4 text-stone-400" />
+                <span>Info</span>
+              </button>
+            )}
 
             <button
               onClick={() => {

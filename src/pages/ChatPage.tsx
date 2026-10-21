@@ -39,6 +39,8 @@ import { EmojiPickerModal } from '../components/Chat/EmojiPickerModal';
 import { ReactionsDetailModal } from '../components/Chat/ReactionsDetailModal';
 import { MediaViewerModal } from '../components/Chat/MediaViewerModal';
 import { ForwardMessageModal } from '../components/Chat/ForwardMessageModal';
+import { MessageInfoSheet } from '../components/Chat/MessageInfoSheet';
+import { PhotoSendPreview } from '../components/Chat/PhotoSendPreview';
 import { Avatar } from '../components/ui/Avatar';
 import { formatDateSeparator } from '../utils/date';
 import type { Message } from '../types';
@@ -68,6 +70,9 @@ const ChatPage: React.FC = () => {
   const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [viewingMediaMessage, setViewingMediaMessage] = useState<Message | null>(null);
+  const [infoMessageId, setInfoMessageId] = useState<string | null>(null);
+  // Photos picked but not sent yet (preview with a caption)
+  const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
 
   // Voice Note Recording States
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
@@ -232,7 +237,7 @@ const ChatPage: React.FC = () => {
       const imageFiles = files.filter((f) => f.type.startsWith('image/'));
       const videoFiles = files.filter((f) => f.type.startsWith('video/'));
 
-      if (imageFiles.length > 0) handleProcessAndSendImages(imageFiles);
+      if (imageFiles.length > 0) setPendingPhotos((prev) => [...prev, ...imageFiles]);
       if (videoFiles.length > 0) handleProcessAndSendVideos(videoFiles);
 
       if (galleryInputRef.current) galleryInputRef.current.value = '';
@@ -243,9 +248,15 @@ const ChatPage: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.type.startsWith('video/')) handleProcessAndSendVideos([file]);
-      else handleProcessAndSendImages([file]);
+      else setPendingPhotos((prev) => [...prev, file]);
       if (cameraInputRef.current) cameraInputRef.current.value = '';
     }
+  };
+
+  const sendPendingPhotos = async (files: File[], caption: string) => {
+    setPendingPhotos([]);
+    await handleProcessAndSendImages(files);
+    if (caption && currentUser) await sendMessage(currentUser.id, partnerUser.id, caption, 'text');
   };
 
   const handleDocumentFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -307,6 +318,31 @@ const ChatPage: React.FC = () => {
     }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length, targetMessageId]);
+
+  // 4+ photos sent together become one album bubble, like WhatsApp
+  const MIN_ALBUM = 4;
+  const albums = useMemo(() => {
+    const leaders = new Map<string, Message[]>();
+    const hidden = new Set<string>();
+    const isAlbumPhoto = (m?: Message) => Boolean(m && m.message_type === 'image' && !m.deleted && m.content && !m.reply_to_msg);
+    let run: Message[] = [];
+    const flush = () => {
+      if (run.length >= MIN_ALBUM) {
+        leaders.set(run[0].local_uuid, run);
+        run.slice(1).forEach((m) => hidden.add(m.local_uuid));
+      }
+      run = [];
+    };
+    for (const m of messages) {
+      const prev = run[run.length - 1];
+      const joins = isAlbumPhoto(m) && prev && prev.sender_id === m.sender_id &&
+        new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() < 2 * 60_000;
+      if (!joins) flush();
+      if (isAlbumPhoto(m)) run.push(m);
+    }
+    flush();
+    return { leaders, hidden };
+  }, [messages]);
 
   const searchTerm = searchQuery.trim().toLowerCase();
   const searchMatches = useMemo(
@@ -808,6 +844,7 @@ const ChatPage: React.FC = () => {
               new Date(a.created_at).toDateString() === new Date(b.created_at).toDateString());
           const isFirstInGroup = showDateSeparator || !sameRun(prevMsg, msg);
           const isLastInGroup = !sameRun(msg, nextMsg);
+          if (albums.hidden.has(msg.local_uuid)) return null;
 
           return (
             <React.Fragment key={msg.local_uuid || msg.id}>
@@ -829,6 +866,7 @@ const ChatPage: React.FC = () => {
                 onJumpToOriginal={jumpToOriginalMessage}
                 isFirstInGroup={isFirstInGroup}
                 isLastInGroup={isLastInGroup}
+                album={albums.leaders.get(msg.local_uuid)}
                 highlight={isSearchOpen && searchMatches.includes(msg.local_uuid) ? searchTerm : undefined}
               />
             </React.Fragment>
@@ -1138,6 +1176,22 @@ const ChatPage: React.FC = () => {
         onForward={() => selectedMessage && setIsForwardModalOpen(true)}
         onToggleStar={() => selectedMessage && toggleStar(selectedMessage.local_uuid)}
         onTogglePin={() => selectedMessage && togglePin(selectedMessage.local_uuid)}
+        onInfo={() => selectedMessage && setInfoMessageId(selectedMessage.local_uuid)}
+      />
+
+      <PhotoSendPreview
+        files={pendingPhotos}
+        recipientName={partnerDisplayName}
+        onAddMore={() => galleryInputRef.current?.click()}
+        onRemove={(i) => setPendingPhotos((prev) => prev.filter((_, idx) => idx !== i))}
+        onCancel={() => setPendingPhotos([])}
+        onSend={(files, caption) => void sendPendingPhotos(files, caption)}
+      />
+
+      {/* Live: ticks and times update while it's open */}
+      <MessageInfoSheet
+        message={messages.find((m) => m.local_uuid === infoMessageId) || null}
+        onClose={() => setInfoMessageId(null)}
       />
 
       <EmojiPickerModal

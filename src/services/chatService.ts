@@ -80,7 +80,8 @@ function resolveReplyReferences(msgs: Message[]): Message[] {
 /** True when a stored message already matches what the server returned. */
 function sameStored(a: Message, b: Message): boolean {
   return a.cipher === b.cipher && a.id === b.id && a.status === b.status && a.edited === b.edited &&
-    a.deleted === b.deleted && a.pinned === b.pinned && a.starred === b.starred && a.message_type === b.message_type;
+    a.deleted === b.deleted && a.pinned === b.pinned && a.starred === b.starred && a.message_type === b.message_type &&
+    a.delivered_at === b.delivered_at && a.read_at === b.read_at;
 }
 
 /** Decrypt the private fields of a profile row. */
@@ -136,6 +137,8 @@ async function toLocalMessage(item: any, existingLocal?: Message): Promise<Messa
     starred: item.starred || false,
     forwarded: item.forwarded || false,
     status,
+    delivered_at: item.delivered_at || undefined,
+    read_at: item.read_at || undefined,
     created_at: item.created_at || new Date().toISOString(),
     updated_at: item.updated_at || item.created_at || new Date().toISOString(),
     reactions: [],

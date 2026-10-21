@@ -91,7 +91,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
             return {
               messages: state.messages.map((m) =>
                 m.local_uuid === incomingMsg.local_uuid || m.id === incomingMsg.id
-                  ? { ...m, ...incomingMsg, status: furthest(m.status, incomingMsg.status) }
+                  ? {
+                      ...m,
+                      ...incomingMsg,
+                      status: furthest(m.status, incomingMsg.status),
+                      delivered_at: incomingMsg.delivered_at ?? m.delivered_at,
+                      read_at: incomingMsg.read_at ?? m.read_at,
+                    }
                   : m
               ),
             };
