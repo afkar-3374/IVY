@@ -159,21 +159,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   loadMoreMessages: async () => {
-    const { isLoadingMessages, hasMoreMessages, pageOffset, messages } = get();
+    const { isLoadingMessages, hasMoreMessages, messages } = get();
     if (isLoadingMessages || !hasMoreMessages) return;
     set({ isLoadingMessages: true });
     try {
-      const allMessages = await chatService.getMessages();
-      const nextOffset = pageOffset + PAGE_SIZE;
-      const end = Math.max(0, allMessages.length - pageOffset - PAGE_SIZE);
-      const start = Math.max(0, end - PAGE_SIZE);
-      const olderMessages = allMessages.slice(start, end);
-      set({
-        messages: [...olderMessages, ...messages],
-        pageOffset: nextOffset,
+      // The page just before the oldest message on screen (from this device's copy)
+      const all = await chatService.getMessages(false);
+      const oldest = messages[0];
+      const end = oldest ? all.findIndex((m) => m.local_uuid === oldest.local_uuid) : all.length;
+      const stop = end === -1 ? 0 : end;
+      const start = Math.max(0, stop - PAGE_SIZE);
+      const older = all.slice(start, stop);
+      set((state) => ({
+        messages: [...older, ...state.messages],
+        pageOffset: state.pageOffset + older.length,
         hasMoreMessages: start > 0,
         isLoadingMessages: false,
-      });
+      }));
     } catch {
       set({ isLoadingMessages: false });
     }

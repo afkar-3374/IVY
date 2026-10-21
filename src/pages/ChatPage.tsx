@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -55,7 +55,7 @@ const ChatPage: React.FC = () => {
   const currentUser = useAuthStore((state) => state.user);
   const partnerUser = useAuthStore((state) => state.getPartnerProfile());
   const { subtext, partnerPresence } = usePresence();
-  const { messages, isLoadingMessages } = useInfiniteMessages();
+  const { messages, isLoadingMessages, hasMoreMessages, loadMoreMessages } = useInfiniteMessages();
   const { triggerTyping } = useTyping();
   const addToast = useUIStore((state) => state.addToast);
   const wallpaper = useSettingsStore((state) => state.wallpaper);
@@ -295,7 +295,7 @@ const ChatPage: React.FC = () => {
   };
 
   // Handle jump to message & target highlight
-  const jumpToOriginalMessage = (localUuid: string) => {
+  const jumpToOriginalMessage = (localUuid: string, pagesLeft = 20) => {
     const el = document.getElementById(`msg-${localUuid}`);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -304,20 +304,48 @@ const ChatPage: React.FC = () => {
       void el.offsetWidth;
       el.classList.add('wa-flash');
       setTimeout(() => el.classList.remove('wa-flash'), 1800);
-    } else {
-      setTargetMessageId(localUuid);
+    } else if (pagesLeft > 0 && useChatStore.getState().hasMoreMessages) {
+      // Not loaded yet: bring in older messages until it is
+      void useChatStore.getState().loadMoreMessages().then(() =>
+        requestAnimationFrame(() => jumpToOriginalMessage(localUuid, pagesLeft - 1))
+      );
     }
   };
 
-  // Auto-scroll on initial load or target message jump
+  // Jumps to a message from another screen (search, starred…)
   useEffect(() => {
-    if (targetMessageId) {
-      jumpToOriginalMessage(targetMessageId);
-      setTargetMessageId(null);
-      return;
-    }
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length, targetMessageId]);
+    if (!targetMessageId) return;
+    const id = targetMessageId;
+    setTargetMessageId(null);
+    jumpToOriginalMessage(id);
+  }, [targetMessageId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Scroll to the newest message when one arrives (not when older ones load above)
+  const newestId = messages[messages.length - 1]?.local_uuid;
+  const hasScrolledOnce = useRef(false);
+  useEffect(() => {
+    if (!newestId) return;
+    messagesEndRef.current?.scrollIntoView({ behavior: hasScrolledOnce.current ? 'smooth' : 'auto' });
+    hasScrolledOnce.current = true;
+  }, [newestId]);
+
+  // Older messages load in above: keep what you were looking at in place
+  const scrollAnchor = useRef<{ height: number; top: number } | null>(null);
+  const oldestId = messages[0]?.local_uuid;
+  useLayoutEffect(() => {
+    const el = scrollContainerRef.current;
+    const anchor = scrollAnchor.current;
+    if (!el || !anchor) return;
+    el.scrollTop = el.scrollHeight - anchor.height + anchor.top;
+    scrollAnchor.current = null;
+  }, [oldestId]);
+
+  const loadOlder = useCallback(async () => {
+    const el = scrollContainerRef.current;
+    if (!el || isLoadingMessages || !hasMoreMessages) return;
+    scrollAnchor.current = { height: el.scrollHeight, top: el.scrollTop };
+    await loadMoreMessages();
+  }, [isLoadingMessages, hasMoreMessages, loadMoreMessages]);
 
   // 4+ photos sent together become one album bubble, like WhatsApp
   const MIN_ALBUM = 4;
@@ -394,6 +422,7 @@ const ChatPage: React.FC = () => {
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
     const isUp = scrollHeight - scrollTop - clientHeight > 300;
     setShowScrollBottomBtn(isUp);
+    if (scrollTop < 400) void loadOlder();
   };
 
   const scrollToBottom = () => {
@@ -569,20 +598,26 @@ const ChatPage: React.FC = () => {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const handleMessageLongPress = (msg: Message) => {
+  // Stable handlers, so typing doesn't redraw every message
+  const handleMessageLongPress = useCallback((msg: Message) => {
     setSelectedMessage(msg);
     setIsActionModalOpen(true);
-  };
+  }, [setSelectedMessage]);
 
-  const handleReactionClick = (msg: Message) => {
+  const handleReactionClick = useCallback((msg: Message) => {
     setSelectedMessage(msg);
     setIsReactionsModalOpen(true);
-  };
+  }, [setSelectedMessage]);
 
-  const handleMediaClick = (msg: Message) => {
+  const handleMediaClick = useCallback((msg: Message) => {
     setViewingMediaMessage(msg);
     setIsMediaViewerOpen(true);
-  };
+  }, []);
+  const handleSwipeToReply = useCallback((m: Message) => setActiveReplyTarget(m), [setActiveReplyTarget]);
+  const handleRetry = useCallback((m: Message) => void retryFailedMessage(m.local_uuid), [retryFailedMessage]);
+  const jumpRef = useRef(jumpToOriginalMessage);
+  jumpRef.current = jumpToOriginalMessage;
+  const handleJump = useCallback((id: string) => jumpRef.current(id), []);
 
   const pinnedMessages = messages.filter((m) => m.pinned);
   const [activePinnedIndex, setActivePinnedIndex] = useState(0);
@@ -804,12 +839,18 @@ const ChatPage: React.FC = () => {
         onScroll={handleScroll}
         className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-1.5 sm:px-[6%] pt-2 pb-3 relative"
       >
+        {isLoadingMessages && messages.length > 0 && hasMoreMessages && (
+          <div className="flex justify-center py-2">
+            <span className="w-5 h-5 rounded-full border-2 border-[#E05A74] border-t-transparent animate-spin" aria-label="Loading older messages" />
+          </div>
+        )}
+
         {isLoadingMessages && messages.length === 0 && (
           <div className="flex justify-center py-4"><span className="wa-pill">Loading messages…</span></div>
         )}
 
         {/* WhatsApp-style encryption notice at the top of the chat */}
-        {!isLoadingMessages && (
+        {!isLoadingMessages && !hasMoreMessages && (
           <div className="flex justify-center mt-2 mb-3 px-6">
             <p className="wa-pill !bg-[#ffeecd] dark:!bg-[#182229] !text-[#54656f] dark:!text-[#ffd279] text-center !text-[12px] leading-snug max-w-sm flex items-start gap-1.5">
               <Lock className="w-3 h-3 mt-[3px] flex-shrink-0" />
@@ -861,9 +902,9 @@ const ChatPage: React.FC = () => {
                 onLongPress={handleMessageLongPress}
                 onReactionClick={handleReactionClick}
                 onMediaClick={handleMediaClick}
-                onSwipeToReply={(m) => setActiveReplyTarget(m)}
-                onRetry={(m) => retryFailedMessage(m.local_uuid)}
-                onJumpToOriginal={jumpToOriginalMessage}
+                onSwipeToReply={handleSwipeToReply}
+                onRetry={handleRetry}
+                onJumpToOriginal={handleJump}
                 isFirstInGroup={isFirstInGroup}
                 isLastInGroup={isLastInGroup}
                 album={albums.leaders.get(msg.local_uuid)}

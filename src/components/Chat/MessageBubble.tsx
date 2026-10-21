@@ -147,7 +147,7 @@ function useLongPress(onLongPress: () => void) {
   };
 }
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({
+const MessageBubbleView: React.FC<MessageBubbleProps> = ({
   message,
   onLongPress,
   onReactionClick,
@@ -557,3 +557,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     </motion.div>
   );
 };
+
+/** Only redraws when its own message (or how it's shown) changes. */
+export const MessageBubble = React.memo(MessageBubbleView);
