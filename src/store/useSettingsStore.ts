@@ -15,6 +15,8 @@ interface SettingsState {
   dndEnabled: boolean;
   /** Type with Ivy's own keyboard in the chat instead of the phone's */
   ivyKeyboard: boolean;
+  /** How long Ivy can sit in the background before it locks (seconds; 0 = straight away) */
+  autoLockSeconds: number;
   setTheme: (theme: ThemeMode) => void;
   setWallpaper: (wallpaper: WallpaperPreset) => void;
   setCustomWallpaper: (dataUrl: string) => void;
@@ -25,6 +27,7 @@ interface SettingsState {
   setNotifyVibration: (enabled: boolean) => void;
   setDndEnabled: (enabled: boolean) => void;
   setIvyKeyboard: (enabled: boolean) => void;
+  setAutoLockSeconds: (seconds: number) => void;
 }
 
 const DARK_THEMES: ThemeMode[] = ['midnight', 'ocean', 'forest'];
@@ -42,6 +45,7 @@ export const useSettingsStore = create<SettingsState>()(
       notifyVibration: true,
       dndEnabled: false,
       ivyKeyboard: true,
+      autoLockSeconds: 30,
 
       setTheme: (theme) => {
         set({ theme });
@@ -85,6 +89,7 @@ export const useSettingsStore = create<SettingsState>()(
         notificationService.setDND(dndEnabled);
       },
       setIvyKeyboard: (ivyKeyboard) => set({ ivyKeyboard }),
+      setAutoLockSeconds: (autoLockSeconds) => set({ autoLockSeconds }),
     }),
     {
       name: 'ivy_settings_preferences',

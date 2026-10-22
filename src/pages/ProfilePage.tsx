@@ -339,10 +339,10 @@ const ProfilePage: React.FC = () => {
                   }`}
                 >
                   {/* Preview swatch */}
-                  <div className={`flex-1 ${wp.preview} flex items-center justify-center text-lg`}>
+                  <div className={`flex-1 w-full ${wp.preview} flex items-center justify-center text-lg`}>
                     {wp.emoji}
                   </div>
-                  <div className="py-1.5 px-1 bg-white dark:bg-stone-900 text-center">
+                  <div className="w-full py-1.5 px-1 bg-white dark:bg-stone-900 text-center">
                     <span className="text-[10px] font-bold text-stone-700 dark:text-stone-200 leading-tight block truncate px-1">
                       {wp.name}
                     </span>

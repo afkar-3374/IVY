@@ -52,7 +52,7 @@ export const EmojiPickerModal: React.FC<EmojiPickerModalProps> = ({
           animate={{ y: 0 }}
           exit={{ y: '100%' }}
           transition={{ type: 'spring', damping: 30, stiffness: 350 }}
-          className="relative w-full max-w-md mx-auto h-[50vh] bg-stone-900 text-white rounded-t-3xl shadow-soft-lg z-10 flex flex-col p-4 pb-safe border-t border-stone-800"
+          className="relative w-full max-w-md mx-auto h-[50vh] bg-white text-stone-900 dark:bg-stone-900 dark:text-white rounded-t-3xl shadow-soft-lg z-10 flex flex-col p-4 pb-safe border-t border-stone-100 dark:border-stone-800"
         >
           {/* Header with Search */}
           <div className="flex items-center gap-2 mb-4">
@@ -63,10 +63,10 @@ export const EmojiPickerModal: React.FC<EmojiPickerModalProps> = ({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search emoji"
-                className="w-full bg-stone-800 text-sm pl-9 pr-4 py-2 rounded-full border border-stone-700 focus:outline-none focus:border-[#C95565]"
+                className="w-full bg-stone-100 dark:bg-stone-800 text-sm pl-9 pr-4 py-2 rounded-full border border-stone-200 dark:border-stone-700 focus:outline-none focus:border-[#C95565]"
               />
             </div>
-            <button onClick={onClose} className="p-2 text-stone-400 hover:text-white">
+            <button onClick={onClose} className="p-2 text-stone-400 hover:text-stone-700 dark:hover:text-white">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -75,7 +75,7 @@ export const EmojiPickerModal: React.FC<EmojiPickerModalProps> = ({
           <div className="flex-1 overflow-y-auto no-scrollbar space-y-4">
             {EMOJI_CATEGORIES.map((cat) => (
               <div key={cat.name}>
-                <h4 className="text-xs font-semibold text-stone-400 mb-2">{cat.name}</h4>
+                <h4 className="text-xs font-semibold text-stone-500 dark:text-stone-400 mb-2">{cat.name}</h4>
                 <div className="grid grid-cols-7 gap-2">
                   {cat.emojis.map((emoji) => (
                     <button
@@ -84,7 +84,7 @@ export const EmojiPickerModal: React.FC<EmojiPickerModalProps> = ({
                         onSelectEmoji(emoji);
                         onClose();
                       }}
-                      className="text-2xl hover:scale-125 transition-transform p-1 active-scale rounded-xl hover:bg-stone-800"
+                      className="text-2xl hover:scale-125 transition-transform p-1 active-scale rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800"
                     >
                       {emoji}
                     </button>

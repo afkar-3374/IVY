@@ -102,7 +102,7 @@ const SearchPage: React.FC = () => {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-2 px-3 text-xs font-bold capitalize transition-colors border-b-2 whitespace-nowrap ${
+              className={`flex-1 py-2 px-1.5 text-[11.5px] font-bold capitalize transition-colors border-b-2 whitespace-nowrap ${
                 activeTab === tab
                   ? 'border-[#C95565] text-[#C95565]'
                   : 'border-transparent text-stone-400 hover:text-stone-600'
@@ -140,7 +140,7 @@ const SearchPage: React.FC = () => {
                 onClick={() => handleSelectMessage(msg.local_uuid)}
                 className="bg-white dark:bg-[#1E1D24] p-3.5 rounded-2xl shadow-soft border border-stone-100 dark:border-stone-800/80 flex items-start gap-3 cursor-pointer active-scale hover:border-[#C95565]/40 transition-colors"
               >
-                <Avatar src={avatar} name={senderName} size="md" />
+                <Avatar src={avatar} name={isUserSelf ? currentUser?.display_name || 'Me' : senderName} size="md" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-1.5">

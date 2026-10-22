@@ -111,7 +111,10 @@ export const BuildShop: React.FC<{ coins: number }> = ({ coins }) => {
                   <div className="h-1.5 rounded-full bg-rose-100 dark:bg-stone-800 overflow-hidden">
                     <div className="h-full rounded-full bg-gradient-to-r from-[#F9A8D4] to-[#E05A74]" style={{ width: `${Math.min(100, (coins / item.cost) * 100)}%` }} />
                   </div>
-                  <p className="text-[11px] text-stone-400 mt-1">{item.cost - coins} more coins · {item.cost} 💗</p>
+                  <p className="text-[11px] text-stone-400 mt-1 flex justify-between gap-1 whitespace-nowrap">
+                    <span className="font-semibold text-stone-500 dark:text-stone-300">{item.cost} 💗</span>
+                    <span>{item.cost - coins} to go</span>
+                  </p>
                 </div>
               )}
             </motion.div>

@@ -40,19 +40,14 @@ export const Avatar: React.FC<AvatarProps> = ({
         />
       ) : (
         <div
-          className={`${sizes[size]} rounded-full bg-gradient-to-br from-[#FCE8EC] to-[#F3DBD3] text-[#C95565] font-bold flex items-center justify-center border border-rose-200 shadow-soft`}
+          className={`${sizes[size]} rounded-full bg-gradient-to-br from-[#FCE8EC] to-[#F3DBD3] dark:from-[#3A2630] dark:to-[#2B2027] text-[#C95565] dark:text-[#F28DA0] font-bold flex items-center justify-center border border-rose-200 dark:border-[#4A2E38] shadow-soft`}
         >
           {getInitials(name)}
         </div>
       )}
 
-      {isOnline !== undefined && (
-        <span
-          className={`absolute rounded-full ring-white dark:ring-[#16151A] ${
-            isOnline ? 'bg-emerald-500' : 'bg-stone-300 dark:bg-stone-600'
-          } ${badgeSizes[size]}`}
-        />
-      )}
+      {/* Like WhatsApp: a green dot while online, nothing otherwise */}
+      {isOnline && <span className={`absolute rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#16151A] ${badgeSizes[size]}`} />}
     </div>
   );
 };

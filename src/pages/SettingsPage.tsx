@@ -22,6 +22,14 @@ import { Switch } from '../components/ui/Switch';
 import { notificationService } from '../services/notificationService';
 import { PushSetting } from '../components/Couple/PushPrompt';
 
+const AUTO_LOCK_OPTIONS = [
+  { seconds: 0, label: 'Immediately' },
+  { seconds: 30, label: '30 sec' },
+  { seconds: 60, label: '1 min' },
+  { seconds: 300, label: '5 min' },
+  { seconds: 1800, label: '30 min' },
+];
+
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
   const currentUser = useAuthStore((state) => state.user);
@@ -44,6 +52,10 @@ const SettingsPage: React.FC = () => {
   const setIvyKeyboard = useSettingsStore((state) => state.setIvyKeyboard);
   const addToast = useUIStore((state) => state.addToast);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const autoLockSeconds = useSettingsStore((state) => state.autoLockSeconds);
+  const setAutoLockSeconds = useSettingsStore((state) => state.setAutoLockSeconds);
+  const lock = useAuthStore((state) => state.lock);
 
   const partnerDisplayName = currentUser?.nickname || partnerUser.display_name;
 
@@ -187,15 +199,48 @@ const SettingsPage: React.FC = () => {
           )}
 
           <button
-            onClick={() => addToast('Privacy settings locked to private couple room', 'info')}
+            onClick={() => setPrivacyOpen((open) => !open)}
             className="w-full flex items-center justify-between p-3.5 hover:bg-stone-50 dark:hover:bg-stone-800/40 rounded-2xl transition-colors"
           >
             <div className="flex items-center gap-3">
               <Lock className="w-4 h-4 text-stone-500" />
               <span className="text-xs font-bold text-stone-800 dark:text-stone-200">Privacy</span>
             </div>
-            <ChevronRight className="w-4 h-4 text-stone-400" />
+            <ChevronRight className={`w-4 h-4 text-stone-400 transition-transform ${privacyOpen ? 'rotate-90' : ''}`} />
           </button>
+
+          {privacyOpen && (
+            <div className="px-3.5 pb-3 pt-1 space-y-3 bg-stone-50/70 dark:bg-stone-900/20 rounded-2xl">
+              <div>
+                <p className="text-xs font-bold">Auto-lock</p>
+                <p className="text-[10px] text-stone-500 mb-2">After Ivy has been in the background this long, it opens to the Kitty Timer again</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {AUTO_LOCK_OPTIONS.map(({ seconds, label }) => (
+                    <button
+                      key={seconds}
+                      onClick={() => setAutoLockSeconds(seconds)}
+                      className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${
+                        autoLockSeconds === seconds
+                          ? 'bg-[#C95565] text-white'
+                          : 'bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200 dark:border-stone-700'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold">Lock now</p>
+                  <p className="text-[10px] text-stone-500">Hide Ivy behind the Kitty Timer straight away</p>
+                </div>
+                <button onClick={lock} className="btn-gloss rounded-full px-3 py-1 text-xs font-semibold flex items-center gap-1">
+                  <Lock className="w-3.5 h-3.5" /> Lock
+                </button>
+              </div>
+            </div>
+          )}
 
           <button
             onClick={handleClearStorage}

@@ -24,11 +24,14 @@ import { WifiOff } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 
 // Re-lock with the PIN after the app has been in the background this long
-const AUTO_LOCK_MS = 30_000;
 
 interface AppLayoutProps {
   children: React.ReactNode;
 }
+
+// Leaving for Ivy's own camera/gallery picker doesn't count towards auto-lock (up to 10 min)
+const PICKER_GRACE_MS = 3_000;
+const PICKER_AWAY_MAX_MS = 10 * 60_000;
 
 export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const location = useLocation();
@@ -84,16 +87,30 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   useEffect(() => {
     let hiddenAt: number | null = null;
+    // Ivy's own photo/file picker (camera, gallery) also sends it to the background
+    let pickerOpenedAt = 0;
+    let hiddenForPicker = false;
+    const onClick = (e: MouseEvent) => {
+      if (e.target instanceof HTMLInputElement && e.target.type === 'file') pickerOpenedAt = Date.now();
+    };
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') {
         hiddenAt = Date.now();
-      } else if (hiddenAt !== null && Date.now() - hiddenAt > AUTO_LOCK_MS) {
-        useAuthStore.getState().lock();
-        hiddenAt = null;
+        hiddenForPicker = hiddenAt - pickerOpenedAt < PICKER_GRACE_MS;
+        return;
       }
+      if (hiddenAt === null) return;
+      const away = Date.now() - hiddenAt;
+      const limit = hiddenForPicker ? PICKER_AWAY_MAX_MS : useSettingsStore.getState().autoLockSeconds * 1000;
+      if (away >= limit) useAuthStore.getState().lock();
+      hiddenAt = null;
     };
+    document.addEventListener('click', onClick, true);
     document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
+    return () => {
+      document.removeEventListener('click', onClick, true);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, []);
 
   useEffect(() => {
