@@ -36,7 +36,6 @@ import { storageService } from '../services/storageService';
 import { MessageBubble } from '../components/Chat/MessageBubble';
 import { MessageActionModal } from '../components/Chat/MessageActionModal';
 import { EmojiPickerModal } from '../components/Chat/EmojiPickerModal';
-import { IvyKeyboard } from '../components/Chat/IvyKeyboard';
 import { ReactionsDetailModal } from '../components/Chat/ReactionsDetailModal';
 import { MediaViewerModal } from '../components/Chat/MediaViewerModal';
 import { ForwardMessageModal } from '../components/Chat/ForwardMessageModal';
@@ -65,11 +64,6 @@ const ChatPage: React.FC = () => {
   const [isActionModalOpen, setIsActionModalOpen] = useState(false);
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
-  // Ivy's own keyboard on phones (Settings can switch back to the phone keyboard)
-  const ivyKeyboard = useSettingsStore((state) => state.ivyKeyboard);
-  const isTouchPhone = useMemo(() => window.matchMedia('(pointer: coarse)').matches, []);
-  const ivyKeyboardOn = ivyKeyboard && isTouchPhone;
-  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [isReactionsModalOpen, setIsReactionsModalOpen] = useState(false);
   const [isMediaViewerOpen, setIsMediaViewerOpen] = useState(false);
   const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
@@ -433,23 +427,6 @@ const ChatPage: React.FC = () => {
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  // The keyboard takes room from the messages: keep the newest ones in view
-  useLayoutEffect(() => {
-    if (isKeyboardOpen && !showScrollBottomBtn) messagesEndRef.current?.scrollIntoView({ block: 'end' });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isKeyboardOpen]);
-
-  const switchToPhoneKeyboard = () => {
-    const el = inputRef.current;
-    useSettingsStore.getState().setIvyKeyboard(false);
-    setIsKeyboardOpen(false);
-    if (!el) return;
-    // Refocus inside this tap so the phone keyboard opens straight away
-    el.inputMode = 'text';
-    el.blur();
-    el.focus();
   };
 
   const handleSend = async (e: React.SyntheticEvent) => {
@@ -971,7 +948,7 @@ const ChatPage: React.FC = () => {
       )}
 
       {/* Composer */}
-      <footer className={`z-30 w-full px-1.5 sm:px-4 pt-1 flex-shrink-0 ${isKeyboardOpen ? 'pb-1.5' : 'pb-[max(var(--safe-bottom),6px)]'}`}>
+      <footer className="z-30 w-full px-1.5 sm:px-4 pt-1 pb-[max(env(safe-area-inset-bottom),6px)] flex-shrink-0">
         <div className="relative flex items-end gap-1.5 max-w-4xl mx-auto">
           {/* Attach sheet: WhatsApp-style colourful circles */}
           <AnimatePresence>
@@ -1121,13 +1098,7 @@ const ChatPage: React.FC = () => {
                     setInputContent(e.target.value);
                     triggerTyping();
                   }}
-                  inputMode={ivyKeyboardOn ? 'none' : undefined}
-                  onFocus={() => {
-                    setIsAttachMenuOpen(false);
-                    if (ivyKeyboardOn) setIsKeyboardOpen(true);
-                  }}
-                  onBlur={() => setIsKeyboardOpen(false)}
-                  onClick={() => ivyKeyboardOn && setIsKeyboardOpen(true)}
+                  onFocus={() => setIsAttachMenuOpen(false)}
                   onKeyDown={(e) => {
                     if (e.key === 'Escape') {
                       setActiveReplyTarget(null);
@@ -1216,23 +1187,6 @@ const ChatPage: React.FC = () => {
           </motion.button>
         </div>
       </footer>
-
-      {isKeyboardOpen && ivyKeyboardOn && (
-        <IvyKeyboard
-          inputRef={inputRef}
-          value={inputContent}
-          onChange={(text) => {
-            setInputContent(text);
-            triggerTyping();
-          }}
-          onEmoji={() => {
-            setSelectedMessage(null);
-            setIsEmojiPickerOpen(true);
-          }}
-          onClose={() => inputRef.current?.blur()}
-          onUsePhoneKeyboard={switchToPhoneKeyboard}
-        />
-      )}
 
       {/* Action Modals */}
       <MessageActionModal
