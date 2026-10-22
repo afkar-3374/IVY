@@ -3,7 +3,7 @@ import type { Message, MessageReaction, MessageType } from '../types';
 import { chatService } from '../services/chatService';
 import { generateLocalUuid } from '../utils/message';
 import { notificationService } from '../services/notificationService';
-import { USER_1_ID, DEFAULT_USER_1_PROFILE, DEFAULT_USER_2_PROFILE } from '../utils/constants';
+import { notifyKeyStore } from '../services/notifyKeyStore';
 import { useAuthStore } from './useAuthStore';
 
 interface ChatState {
@@ -107,15 +107,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
             incomingMsg.sender_id !== currentUserId &&
             incomingMsg.message_type !== 'system';
           if (isIncoming) {
-            const senderProfile = incomingMsg.sender_id === USER_1_ID
-              ? DEFAULT_USER_1_PROFILE
-              : DEFAULT_USER_2_PROFILE;
-            notificationService.notifyNewMessage(
-              incomingMsg.local_uuid || incomingMsg.id || String(Date.now()),
-              senderProfile.nickname || senderProfile.display_name,
-              'Sent you a message ❤️', // never show message text on the lock screen
-              incomingMsg.message_type
-            );
+            // Same name and text as the push notification (which it merges with, by message id)
+            void notifyKeyStore.getShowText().then((showText) => {
+              const { user, getPartnerProfile } = useAuthStore.getState();
+              notificationService.notifyNewMessage(
+                incomingMsg.local_uuid || incomingMsg.id || String(Date.now()),
+                user?.nickname?.trim() || getPartnerProfile().display_name,
+                showText ? incomingMsg.content.trim().slice(0, 300) || '💌 New message' : '💌 New message',
+                incomingMsg.message_type,
+                incomingMsg.sender_id
+              );
+            });
           }
           const nextMessages = [...state.messages, incomingMsg];
           if (isIncoming) {

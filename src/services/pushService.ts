@@ -124,14 +124,14 @@ class PushService {
    * lag behind a swiped-away app — and the partner's phone skips it if Ivy is on screen.
    * Taps, hugs and game turns are skipped while the partner is online (they see those live).
    */
-  async notifyPartner(kind: PushKind, message?: { content: string; message_type?: MessageType }): Promise<void> {
+  async notifyPartner(kind: PushKind, message?: { content: string; message_type?: MessageType; local_uuid?: string }): Promise<void> {
     if (!supabase) return;
     if ((kind === 'tap' || kind === 'hug' || kind === 'game') && usePresenceStore.getState().partnerPresence.online) return;
     const now = Date.now();
     if (now - (lastSent.get(kind) || 0) < THROTTLE_MS[kind]) return;
     lastSent.set(kind, now);
     const preview = message ? await sealedPreview(message) : undefined;
-    const { error } = await supabase.functions.invoke('send-push', { body: { kind, preview } });
+    const { error } = await supabase.functions.invoke('send-push', { body: { kind, preview, id: message?.local_uuid } });
     if (error) logger.warn('Push not sent:', error.message);
   }
 }

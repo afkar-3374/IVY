@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
   const { data: isMember } = await asUser.rpc('is_member');
   if (!me || !isMember) return json({ error: 'forbidden' }, 403);
 
-  const { kind, preview } = await req.json().catch(() => ({ kind: '' }));
+  const { kind, preview, id } = await req.json().catch(() => ({ kind: '' }));
   const note = KINDS[kind];
   if (!note) return json({ error: 'unknown kind' }, 400);
   const sealed = typeof preview === 'string' && preview.startsWith('enc1:') && preview.length <= 2000 ? preview : undefined;
@@ -60,6 +60,8 @@ Deno.serve(async (req) => {
     from: me,
     to: partner.id,
     preview: sealed,
+    // Message id, so the phone shows a message once even if Ivy also reported it
+    id: typeof id === 'string' && id.length <= 64 ? id : undefined,
   });
   let sent = 0;
   const gone: string[] = [];

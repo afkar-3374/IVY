@@ -60,55 +60,50 @@ class NotificationService {
   }
 
   /* ── Core notify ───────────────────────────────────────────────── */
+  /**
+   * Shown by the service worker (public/push-handler.js), the only way phones allow:
+   * Android refuses `new Notification()` from a page. Same tags and message ids as the
+   * push notifications, so a message never shows twice and messages stack per person.
+   */
   private show(
     title: string,
     body: string,
-    options: NotificationOptions & { dedupeKey?: string; onClick?: () => void } = {}
-  ): void {
-    if (typeof Notification === 'undefined') return;
-    if (Notification.permission !== 'granted') return;
-    if (this.prefs.dnd) return;
-    if (!this.prefs.enabled) return;
+    options: { dedupeKey?: string; kind: 'message' | 'call' | 'system'; tag: string; id?: string; url?: string }
+  ): boolean {
+    if (typeof Notification === 'undefined') return false;
+    if (Notification.permission !== 'granted') return false;
+    if (this.prefs.dnd) return false;
+    if (!this.prefs.enabled) return false;
 
     // Skip if tab is focused
-    if (document.hasFocus() && document.visibilityState === 'visible') return;
+    if (document.hasFocus() && document.visibilityState === 'visible') return false;
 
     // Deduplication
     const key = options.dedupeKey || `${title}-${body}`;
-    if (this.sentIds.has(key)) return;
+    if (this.sentIds.has(key)) return false;
     this.sentIds.add(key);
-
     // Auto-clear from dedup set after 30 s
     setTimeout(() => this.sentIds.delete(key), 30_000);
 
-    const { dedupeKey: _dk, onClick, ...notifOptions } = options;
-
-    try {
-      const notif = new Notification(title, {
-        icon: '/pwa-192x192.png',
-        badge: '/badge-96x96.png',
-        silent: true, // we play our own sound
-        tag: key,
-        ...notifOptions,
-        body,
-      });
-
-      if (onClick) {
-        notif.onclick = (e) => {
-          e.preventDefault();
-          window.focus();
-          onClick();
-          notif.close();
-        };
-      } else {
+    const data = { kind: options.kind, title, text: body, tag: options.tag, id: options.id, url: options.url || '/chat' };
+    void (async () => {
+      try {
+        const reg = await navigator.serviceWorker?.getRegistration();
+        if (reg?.active) {
+          reg.active.postMessage({ type: 'ivy-notify', data });
+          return;
+        }
+        // No service worker (some desktop browsers): a plain notification
+        const notif = new Notification(title, { body, icon: '/pwa-192x192.png', badge: '/badge-96x96.png', tag: options.tag });
         notif.onclick = () => {
           window.focus();
           notif.close();
         };
+      } catch (err) {
+        logger.warn('Failed to show notification:', err);
       }
-    } catch (err) {
-      logger.warn('Failed to show notification:', err);
-    }
+    })();
+    return true;
   }
 
   /* ── Message notification ──────────────────────────────────────── */
@@ -116,14 +111,15 @@ class NotificationService {
     messageId: string,
     partnerName: string,
     body: string,
-    messageType: MessageType = 'text'
+    messageType: MessageType = 'text',
+    senderId?: string
   ): void {
     if (!this.prefs.messages) return;
 
     const typeLabel: Record<string, string> = {
       image: '📷 Photo',
       video: '🎥 Video',
-      voice: '🎤 Voice note',
+      voice: '🎤 Voice message',
       document: '📄 Document',
       file: '📎 File',
       audio: '🎵 Audio',
@@ -131,14 +127,15 @@ class NotificationService {
 
     const displayBody = typeLabel[messageType] ?? body;
 
-    this.show(`❤️ ${partnerName}`, displayBody, {
+    const shown = this.show(partnerName, displayBody, {
       dedupeKey: messageId,
-      onClick: () => {
-        window.location.hash = '';
-        window.dispatchEvent(new CustomEvent('ivy:notification-click', { detail: { messageId } }));
-      },
+      kind: senderId ? 'message' : 'system',
+      tag: senderId ? `ivy-message-${senderId}` : 'ivy-love',
+      id: messageId,
     });
 
+    // In the background the notification makes the phone's own sound; in the app, a soft chime
+    if (shown) return;
     if (this.prefs.sound) this.playChime('message');
     if (this.prefs.vibration && navigator.vibrate) navigator.vibrate([100, 50, 80]);
   }
@@ -150,7 +147,8 @@ class NotificationService {
     const icon = callType === 'video' ? '📹' : '📞';
     this.show(`${icon} Incoming ${callType === 'video' ? 'Video' : 'Voice'} Call`, partnerName, {
       dedupeKey: `incoming-call-${Date.now()}`,
-      requireInteraction: true,
+      kind: 'call',
+      tag: 'ivy-call',
     });
 
     if (this.prefs.sound) this.playChime('call');
@@ -164,6 +162,8 @@ class NotificationService {
     const icon = callType === 'video' ? '📹' : '📞';
     this.show(`${icon} Missed ${callType === 'video' ? 'Video' : 'Voice'} Call`, `${partnerName} called`, {
       dedupeKey: `missed-call-${Date.now()}`,
+      kind: 'system',
+      tag: 'ivy-missed-call',
     });
   }
 

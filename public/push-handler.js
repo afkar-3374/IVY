@@ -55,24 +55,39 @@ async function ivyOnScreen() {
 
 const MAX_LINES = 6;
 
-async function showPush(data) {
+// One at a time: the app and the push can report the same message at the same moment
+let showing = Promise.resolve();
+function queueShow(data, fromApp) {
+  showing = showing.then(() => showPush(data, fromApp)).catch(() => {});
+  return showing;
+}
+
+// fromApp: Ivy (open in the background) asked for it, with the text already in hand
+async function showPush(data, fromApp) {
   const kind = data.kind || 'message';
-  if (kind !== 'call' && (await ivyOnScreen())) return;
+  if (!fromApp && kind !== 'call' && (await ivyOnScreen())) return;
 
   const tag = data.tag || 'ivy';
   let title = data.title || 'Ivy';
   let body = data.body || '💌 Something new for you';
   let lines = [];
+  let ids = [];
 
   if (kind === 'message') {
-    const text = await readPreview(data);
     // Stack messages from the same person into one notification, like WhatsApp
     const previous = (await self.registration.getNotifications({ tag }))[0];
-    const count = ((previous && previous.data && previous.data.count) || 0) + 1;
-    lines = ((previous && previous.data && previous.data.lines) || []).concat(text || body).slice(-MAX_LINES);
+    const before = (previous && previous.data) || {};
+    // The app and the push both report a message: show it once
+    if (data.id && (before.ids || []).includes(data.id)) return;
+    const text = data.text || (await readPreview(data));
+    const count = (before.count || 0) + 1;
+    lines = (before.lines || []).concat(text || body).slice(-MAX_LINES);
+    ids = (before.ids || []).concat(data.id || []).slice(-50);
     body = lines.join('\n');
     if (count > 1) title = `${title} (${count} messages)`;
     data.count = count;
+  } else if (data.text) {
+    body = data.text;
   }
 
   await self.registration.showNotification(title, {
@@ -84,7 +99,7 @@ async function showPush(data) {
     timestamp: Date.now(),
     requireInteraction: kind === 'call',
     vibrate: kind === 'call' ? [300, 150, 300, 150, 300, 150, 600] : [120, 60, 120],
-    data: { url: data.url || '/', kind, lines, count: data.count || 1 },
+    data: { url: data.url || '/', kind, lines, ids, count: data.count || 1 },
   });
   if (kind === 'message' && self.navigator.setAppBadge) {
     const open = await self.registration.getNotifications();
@@ -100,7 +115,11 @@ self.addEventListener('push', (event) => {
   } catch (e) {
     data = {};
   }
-  event.waitUntil(showPush(data));
+  event.waitUntil(queueShow(data, false));
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'ivy-notify') event.waitUntil(queueShow(event.data.data || {}, true));
 });
 
 self.addEventListener('notificationclick', (event) => {
