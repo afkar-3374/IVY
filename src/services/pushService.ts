@@ -1,6 +1,8 @@
 import { supabase } from './supabaseClient';
 import { logger } from './logger/logger';
 import { usePresenceStore } from '../store/usePresenceStore';
+import { seal } from './crypto/coupleCrypto';
+import type { MessageType } from '../types';
 
 export type PushKind = 'message' | 'call' | 'tap' | 'hug' | 'game';
 
@@ -16,7 +18,29 @@ function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
 
 /** Throttle repeated pushes of the same kind (e.g. a burst of messages). */
 const lastSent = new Map<PushKind, number>();
-const THROTTLE_MS: Record<PushKind, number> = { message: 20_000, call: 0, tap: 30_000, hug: 30_000, game: 20_000 };
+const THROTTLE_MS: Record<PushKind, number> = { message: 0, call: 0, tap: 30_000, hug: 30_000, game: 20_000 };
+
+const PREVIEW_CHARS = 300;
+const TYPE_PREVIEW: Partial<Record<MessageType, string>> = {
+  image: '📷 Photo',
+  video: '🎥 Video',
+  audio: '🎵 Audio',
+  voice: '🎤 Voice message',
+  document: '📄 Document',
+  file: '📎 File',
+};
+
+/** What the notification should say, sealed with the couple key so only the partner's phone can read it. */
+async function sealedPreview(message: { content: string; message_type?: MessageType }): Promise<string | undefined> {
+  const type = message.message_type || 'text';
+  const text = type === 'text' ? message.content.trim().slice(0, PREVIEW_CHARS) : TYPE_PREVIEW[type];
+  if (!text) return undefined;
+  try {
+    return await seal(text);
+  } catch {
+    return undefined; // chat locked: the notification just says "New message"
+  }
+}
 
 class PushService {
   isSupported(): boolean {
@@ -83,17 +107,31 @@ class PushService {
     if (error) logger.error('Unable to save push subscription:', error.message);
   }
 
+  /** Opening Ivy clears the message notifications and the icon badge, like WhatsApp. */
+  async clearMessageNotifications(): Promise<void> {
+    try {
+      const reg = await navigator.serviceWorker?.getRegistration();
+      const open = (await reg?.getNotifications()) || [];
+      open.filter((n) => n.data?.kind === 'message').forEach((n) => n.close());
+      await (navigator as { clearAppBadge?: () => Promise<void> }).clearAppBadge?.();
+    } catch {
+      /* not supported here */
+    }
+  }
+
   /**
-   * Notify the partner's closed/background devices. Skipped while they are online in
-   * Ivy (they already get it live), except calls, which always ring.
+   * Notify the partner's devices. Messages and calls always go out — online status can
+   * lag behind a swiped-away app — and the partner's phone skips it if Ivy is on screen.
+   * Taps, hugs and game turns are skipped while the partner is online (they see those live).
    */
-  async notifyPartner(kind: PushKind): Promise<void> {
+  async notifyPartner(kind: PushKind, message?: { content: string; message_type?: MessageType }): Promise<void> {
     if (!supabase) return;
-    if (kind !== 'call' && usePresenceStore.getState().partnerPresence.online) return;
+    if ((kind === 'tap' || kind === 'hug' || kind === 'game') && usePresenceStore.getState().partnerPresence.online) return;
     const now = Date.now();
     if (now - (lastSent.get(kind) || 0) < THROTTLE_MS[kind]) return;
     lastSent.set(kind, now);
-    const { error } = await supabase.functions.invoke('send-push', { body: { kind } });
+    const preview = message ? await sealedPreview(message) : undefined;
+    const { error } = await supabase.functions.invoke('send-push', { body: { kind, preview } });
     if (error) logger.warn('Push not sent:', error.message);
   }
 }

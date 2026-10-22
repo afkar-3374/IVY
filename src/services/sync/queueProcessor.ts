@@ -108,7 +108,7 @@ class QueueProcessor {
               if (!error && data) {
                 await conflictResolver.resolveMessageSync(msgPayload.local_uuid, data.id);
                 announce(msgPayload.local_uuid, 'Sent', data.id);
-                if (msgPayload.message_type !== 'system') void pushService.notifyPartner('message');
+                if (msgPayload.message_type !== 'system') void pushService.notifyPartner('message', msgPayload);
                 success = true;
               } else {
                 logger.error('Queue error sending message:', error?.message);

@@ -14,6 +14,7 @@ import {
 import { DEFAULT_USER_1_PROFILE, DEFAULT_USER_2_PROFILE, USER_1_ID, ACCOUNT_EMAILS } from '../utils/constants';
 import { logger } from '../services/logger/logger';
 import { ivyDb } from '../db/ivyDb';
+import { notifyKeyStore } from '../services/notifyKeyStore';
 import { useChatStore } from './useChatStore';
 
 interface AuthState {
@@ -66,7 +67,9 @@ export const useAuthStore = create<AuthState>()(
           const { data: sessionData } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
           if (cached && sessionData.session?.user.id === cached.userId && get().user?.id === cached.userId) {
             try {
-              setCoupleKey(await unwrapCoupleKey(code, cached.vault));
+              const key = await unwrapCoupleKey(code, cached.vault);
+              setCoupleKey(key);
+              void notifyKeyStore.remember(key, cached.userId);
               set({ isUnlocked: true, isLoading: false });
               void get().refreshProfiles();
               return true;
@@ -89,7 +92,9 @@ export const useAuthStore = create<AuthState>()(
               .single();
             if (vaultError || !vault) throw new Error(vaultError?.message || 'Missing key');
 
-            setCoupleKey(await unwrapCoupleKey(code, vault as KeyVaultRow));
+            const key = await unwrapCoupleKey(code, vault as KeyVaultRow);
+            setCoupleKey(key);
+            void notifyKeyStore.remember(key, data.user.id);
             cacheVault(data.user.id, vault as KeyVaultRow);
 
             if (get().user && get().user!.id !== data.user.id) {
@@ -128,6 +133,7 @@ export const useAuthStore = create<AuthState>()(
         profilesUnsubscribe = null;
         setCoupleKey(null);
         clearCachedVault();
+        await notifyKeyStore.forget();
         await clearLocalData();
         if (supabase) await supabase.auth.signOut();
         set({ user: null, partner: null, isAuthenticated: false, isUnlocked: false, error: null });

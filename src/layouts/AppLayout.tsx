@@ -59,6 +59,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     const me = useAuthStore.getState().user?.id;
     const stopPresence = me ? usePresenceStore.getState().initPresenceChannel(me) : () => {};
     void pushService.refresh();
+    void pushService.clearMessageNotifications();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void pushService.clearMessageNotifications();
+    };
+    document.addEventListener('visibilitychange', onVisible);
     // Receive messages on every screen, so the sender sees "delivered" (✓✓) right away
     void import('../store/useChatStore').then(({ useChatStore }) => useChatStore.getState().loadInitialMessages());
     // Fetch call relay details ahead of time so calls start instantly
@@ -67,6 +72,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       stopCouple();
       stopGames();
       stopPresence();
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [isUnlocked]);
 

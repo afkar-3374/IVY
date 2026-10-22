@@ -1,5 +1,5 @@
-// Sends a web push to the partner's devices. Bodies are fixed, generic texts so no
-// message content ever reaches a push service or a lock screen.
+// Sends a web push to the partner's devices, titled with the sender's name. Message text
+// only travels sealed with the couple key ("preview"); the partner's phone decrypts it.
 // Secrets: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import webpush from 'npm:web-push@3.6.7';
@@ -10,7 +10,7 @@ const cors = {
 };
 
 const KINDS: Record<string, { title: string; body: string; tag: string; urgency: 'high' | 'normal'; url: string }> = {
-  message: { title: 'Ivy', body: '💌 You have a new message', tag: 'ivy-message', urgency: 'high', url: '/chat' },
+  message: { title: 'Ivy', body: '💌 New message', tag: 'ivy-message', urgency: 'high', url: '/chat' },
   call: { title: 'Ivy', body: '📞 Incoming call — open Ivy to answer', tag: 'ivy-call', urgency: 'high', url: '/chat' },
   tap: { title: 'Ivy', body: '💗 Someone is thinking of you', tag: 'ivy-love', urgency: 'normal', url: '/us' },
   hug: { title: 'Ivy', body: '🤗 Someone wants a hug — open Ivy', tag: 'ivy-love', urgency: 'normal', url: '/love' },
@@ -31,13 +31,18 @@ Deno.serve(async (req) => {
   const { data: isMember } = await asUser.rpc('is_member');
   if (!me || !isMember) return json({ error: 'forbidden' }, 403);
 
-  const { kind } = await req.json().catch(() => ({ kind: '' }));
+  const { kind, preview } = await req.json().catch(() => ({ kind: '' }));
   const note = KINDS[kind];
   if (!note) return json({ error: 'unknown kind' }, 400);
+  const sealed = typeof preview === 'string' && preview.startsWith('enc1:') && preview.length <= 2000 ? preview : undefined;
 
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-  const { data: partner } = await admin.from('profiles').select('id').neq('id', me).limit(1).single();
+  const { data: profiles } = await admin.from('profiles').select('id, display_name, nickname');
+  const sender = profiles?.find((p) => p.id === me);
+  const partner = profiles?.find((p) => p.id !== me);
   if (!partner) return json({ sent: 0 });
+  // The name the partner gave the sender, like a saved contact name
+  const name = partner.nickname?.trim() || sender?.display_name || note.title;
   const { data: subs } = await admin.from('push_subscriptions').select('*').eq('user_id', partner.id);
 
   webpush.setVapidDetails(
@@ -46,7 +51,16 @@ Deno.serve(async (req) => {
     Deno.env.get('VAPID_PRIVATE_KEY')!
   );
 
-  const payload = JSON.stringify({ title: note.title, body: note.body, tag: note.tag, url: note.url, kind });
+  const payload = JSON.stringify({
+    title: name,
+    body: note.body,
+    tag: kind === 'message' ? `ivy-message-${me}` : note.tag,
+    url: note.url,
+    kind,
+    from: me,
+    to: partner.id,
+    preview: sealed,
+  });
   let sent = 0;
   const gone: string[] = [];
   await Promise.all(
@@ -55,7 +69,7 @@ Deno.serve(async (req) => {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
           payload,
-          { TTL: kind === 'call' ? 60 : 3600, urgency: note.urgency, topic: note.tag }
+          { TTL: kind === 'call' ? 60 : 86400, urgency: note.urgency }
         );
         sent += 1;
       } catch (err) {
