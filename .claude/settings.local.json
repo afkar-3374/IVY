@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(git push origin main)",
-      "Bash(supabase functions deploy:*)",
-      "Bash(supabase db push:*)"
-    ]
-  }
-}
