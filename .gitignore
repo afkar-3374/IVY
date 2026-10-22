@@ -57,3 +57,4 @@ dist-ssr/
 .env*
 *.tsbuildinfo
 .claude/settings.local.json
+shot-*.png
