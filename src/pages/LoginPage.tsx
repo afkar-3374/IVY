@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Heart, Delete } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useUIStore } from '../store/useUIStore';
-import { TimerApp } from '../components/Decoy/TimerApp';
+import { KittyTimer } from '../components/Decoy/KittyTimer';
 import confetti from 'canvas-confetti';
 
 const PIN_LENGTH = 6;
@@ -54,7 +54,7 @@ const LoginPage: React.FC = () => {
   });
 
   if (showTimer) {
-    return <TimerApp onSecretTap={() => setShowTimer(false)} />;
+    return <KittyTimer onSecretTap={() => setShowTimer(false)} />;
   }
 
   return (

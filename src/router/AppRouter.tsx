@@ -27,7 +27,7 @@ export const AppRouter: React.FC = () => {
           </div>
         ) : (
           // Locked: nothing that gives Ivy away while the timer loads
-          <div className="fixed inset-0 z-50 bg-[#12161C]" />
+          <div className="fixed inset-0 z-50 bg-[#FFF4E8]" />
         )
       }
     >
