@@ -206,14 +206,14 @@ export const IvyKeyboard: React.FC<IvyKeyboardProps> = ({ inputRef, value, onCha
         {shift === 'lock' ? <ArrowBigUpDash className="w-[22px] h-[22px]" /> : <ArrowBigUp className="w-[22px] h-[22px]" fill={shift === 'once' ? 'currentColor' : 'none'} />}
       </button>
     ) : (
-      <button type="button" className="ivy-key ivy-key-fn flex-[1.5] text-[14px] tracking-tight" {...press(() => setLayer(layer === '123' ? 'sym' : '123'))}>
+      <button type="button" className="ivy-key ivy-key-fn flex-[1.5] text-[14px] tracking-tight whitespace-nowrap" {...press(() => setLayer(layer === '123' ? 'sym' : '123'))}>
         {layer === '123' ? '=\\<' : '?123'}
       </button>
     );
 
   return (
     <div
-      className="ivy-keyboard flex-shrink-0 select-none touch-none px-1 pb-[max(env(safe-area-inset-bottom),6px)]"
+      className="ivy-keyboard flex-shrink-0 select-none touch-none px-1 pb-[max(var(--safe-bottom),6px)]"
       role="group"
       aria-label="Ivy keyboard"
       onPointerDown={(e) => e.preventDefault()}
@@ -262,7 +262,7 @@ export const IvyKeyboard: React.FC<IvyKeyboardProps> = ({ inputRef, value, onCha
           </button>
         </div>
         <div className="flex gap-[5px]">
-          <button type="button" className="ivy-key ivy-key-fn flex-[1.5] text-[14px] tracking-tight font-medium" {...press(() => setLayer(layer === 'abc' ? '123' : 'abc'))}>
+          <button type="button" className="ivy-key ivy-key-fn flex-[1.5] text-[14px] tracking-tight font-medium whitespace-nowrap" {...press(() => setLayer(layer === 'abc' ? '123' : 'abc'))}>
             {layer === 'abc' ? '?123' : 'ABC'}
           </button>
           <button type="button" aria-label="Emoji" className="ivy-key ivy-key-fn flex-1" {...tapUp(onEmoji)}>
@@ -297,7 +297,7 @@ export const IvyKeyboard: React.FC<IvyKeyboardProps> = ({ inputRef, value, onCha
             onMouseDown={(e) => e.preventDefault()}
             onContextMenu={(e) => e.preventDefault()}
           >
-            Ivy
+            space
           </button>
           {charKey('.')}
           <button type="button" aria-label="New line" className="ivy-key ivy-key-enter flex-[1.5]" {...press(() => insert('\n'))}>

@@ -50,7 +50,7 @@ export const PhotoSendPreview: React.FC<PhotoSendPreviewProps> = ({ files, recip
             {urls[active] && <img src={urls[active]} alt="" className="max-w-full max-h-full object-contain rounded-sm" />}
           </div>
 
-          <div className="pb-[max(env(safe-area-inset-bottom),10px)] pt-2 px-2 flex flex-col gap-2">
+          <div className="pb-[max(var(--safe-bottom),10px)] pt-2 px-2 flex flex-col gap-2">
             <div className="flex gap-1.5 overflow-x-auto px-1 pb-1">
               {urls.map((u, i) => (
                 <button

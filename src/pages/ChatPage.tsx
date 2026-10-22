@@ -971,7 +971,7 @@ const ChatPage: React.FC = () => {
       )}
 
       {/* Composer */}
-      <footer className={`z-30 w-full px-1.5 sm:px-4 pt-1 flex-shrink-0 ${isKeyboardOpen ? 'pb-1.5' : 'pb-[max(env(safe-area-inset-bottom),6px)]'}`}>
+      <footer className={`z-30 w-full px-1.5 sm:px-4 pt-1 flex-shrink-0 ${isKeyboardOpen ? 'pb-1.5' : 'pb-[max(var(--safe-bottom),6px)]'}`}>
         <div className="relative flex items-end gap-1.5 max-w-4xl mx-auto">
           {/* Attach sheet: WhatsApp-style colourful circles */}
           <AnimatePresence>
