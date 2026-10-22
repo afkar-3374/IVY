@@ -70,7 +70,10 @@ const ChatPage: React.FC = () => {
   const isTouchPhone = useMemo(() => window.matchMedia('(pointer: coarse)').matches, []);
   const ivyKeyboardOn = ivyKeyboard && isTouchPhone;
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // Room left under the message box for the Ivy keyboard
+  const [keyboardRoom, setKeyboardRoom] = useState(0);
+  const footerRef = useRef<HTMLElement>(null);
+  const keyboardRoomRef = useRef<HTMLDivElement>(null);
   const [isReactionsModalOpen, setIsReactionsModalOpen] = useState(false);
   const [isMediaViewerOpen, setIsMediaViewerOpen] = useState(false);
   const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
@@ -442,7 +445,25 @@ const ChatPage: React.FC = () => {
     const list = scrollContainerRef.current;
     if (isKeyboardOpen && !showScrollBottomBtn && list) list.scrollTop = list.scrollHeight;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isKeyboardOpen, keyboardHeight]);
+  }, [isKeyboardOpen, keyboardRoom]);
+
+  // Keep the message box sitting right on top of the keyboard. Measured, not assumed:
+  // some phones make the page taller than the screen, which hid the box behind the keys.
+  const fitAboveKeyboard = useCallback(() => {
+    requestAnimationFrame(() => {
+      const keys = document.querySelector('.ivy-keyboard');
+      const footer = footerRef.current;
+      if (!keys || !footer) return;
+      // From the room actually on screen, so repeated checks never add up
+      const shown = keyboardRoomRef.current?.offsetHeight ?? 0;
+      const overlap = footer.getBoundingClientRect().bottom - keys.getBoundingClientRect().top;
+      if (Math.abs(overlap) >= 1) setKeyboardRoom(Math.max(0, Math.round(shown + overlap)));
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isKeyboardOpen) setKeyboardRoom(0);
+  }, [isKeyboardOpen]);
 
   const switchToPhoneKeyboard = () => {
     const el = inputRef.current;
@@ -974,7 +995,7 @@ const ChatPage: React.FC = () => {
       )}
 
       {/* Composer */}
-      <footer className={`z-30 w-full px-1.5 sm:px-4 pt-1 flex-shrink-0 ${isKeyboardOpen ? 'pb-1.5' : 'pb-[max(var(--safe-bottom),6px)]'}`}>
+      <footer ref={footerRef} className={`z-30 w-full px-1.5 sm:px-4 pt-1 flex-shrink-0 ${isKeyboardOpen ? 'pb-1.5' : 'pb-[max(var(--safe-bottom),6px)]'}`}>
         <div className="relative flex items-end gap-1.5 max-w-4xl mx-auto">
           {/* Attach sheet: WhatsApp-style colourful circles */}
           <AnimatePresence>
@@ -1221,10 +1242,10 @@ const ChatPage: React.FC = () => {
       </footer>
 
       {/* Room under the message box for the Ivy keyboard (which floats over the bottom) */}
-      {isKeyboardOpen && ivyKeyboardOn && <div className="flex-shrink-0" style={{ height: keyboardHeight }} aria-hidden="true" />}
+      {isKeyboardOpen && ivyKeyboardOn && <div ref={keyboardRoomRef} className="flex-shrink-0" style={{ height: keyboardRoom }} aria-hidden="true" />}
       {isKeyboardOpen && ivyKeyboardOn && (
         <IvyKeyboard
-          onHeight={setKeyboardHeight}
+          onHeight={fitAboveKeyboard}
           inputRef={inputRef}
           value={inputContent}
           onChange={(text) => {
