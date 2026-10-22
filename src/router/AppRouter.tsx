@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { ProtectedRoute } from './ProtectedRoute';
 import { PublicRoute } from './PublicRoute';
 import { Loader } from '../components/ui/Loader';
+import { useAuthStore } from '../store/useAuthStore';
 
 const LoginPage = lazy(() => import('../pages/LoginPage'));
 const ChatPage = lazy(() => import('../pages/ChatPage'));
@@ -16,12 +17,18 @@ const PlayPage = lazy(() => import('../pages/PlayPage'));
 const GardenPage = lazy(() => import('../pages/GardenPage'));
 
 export const AppRouter: React.FC = () => {
+  const isUnlocked = useAuthStore((state) => state.isAuthenticated && state.isUnlocked);
   return (
     <Suspense
       fallback={
-        <div className="flex-1 flex items-center justify-center">
-          <Loader text="Loading Ivy..." size="lg" />
-        </div>
+        isUnlocked ? (
+          <div className="flex-1 flex items-center justify-center">
+            <Loader text="Loading Ivy..." size="lg" />
+          </div>
+        ) : (
+          // Locked: nothing that gives Ivy away while the timer loads
+          <div className="fixed inset-0 z-50 bg-[#12161C]" />
+        )
       }
     >
       <Routes>

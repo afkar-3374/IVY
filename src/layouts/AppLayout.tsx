@@ -102,7 +102,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   return (
     <div className="h-[100dvh] w-full flex bg-gradient-to-br from-[#FFF7F5] via-[#FDF2F4] to-[#F7F1FB] dark:from-[#16151A] dark:via-[#1A1620] dark:to-[#16151A] text-stone-900 dark:text-stone-100 font-sans antialiased overflow-hidden">
-      {!isChat && <PetalBackground />}
+      {isUnlocked && !isChat && <PetalBackground />}
       {showNav && <SideNav />}
 
       <div className="flex-1 min-w-0 flex flex-col relative">
@@ -115,7 +115,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         )}
 
         {/* PWA Install Banner */}
-        <InstallPromptBanner />
+        {isUnlocked && <InstallPromptBanner />}
 
         {/* Global WebRTC Audio/Video Call Overlay */}
         <CallOverlay />

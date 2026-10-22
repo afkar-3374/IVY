@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Heart, Delete } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useUIStore } from '../store/useUIStore';
-import { KittyTimer } from '../components/Decoy/KittyTimer';
+import { TimerApp } from '../components/Decoy/TimerApp';
 import confetti from 'canvas-confetti';
 
 const PIN_LENGTH = 6;
@@ -11,7 +11,8 @@ const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'];
 
 const LoginPage: React.FC = () => {
   const [pin, setPin] = useState('');
-  const [showTimer, setShowTimer] = useState(false);
+  // Opens as a plain timer; three taps on the time show the PIN screen
+  const [showTimer, setShowTimer] = useState(true);
   const login = useAuthStore((state) => state.login);
   const isLoading = useAuthStore((state) => state.isLoading);
   const authError = useAuthStore((state) => state.error);
@@ -24,7 +25,7 @@ const LoginPage: React.FC = () => {
       confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
       addToast('Welcome back to Ivy ❤️', 'success');
     } else if (!useAuthStore.getState().error) {
-      // Wrong PIN: show the decoy timer instead of an error
+      // Wrong PIN: back to the timer instead of an error
       setShowTimer(true);
     }
   };
@@ -53,7 +54,7 @@ const LoginPage: React.FC = () => {
   });
 
   if (showTimer) {
-    return <KittyTimer onSecretTap={() => setShowTimer(false)} />;
+    return <TimerApp onSecretTap={() => setShowTimer(false)} />;
   }
 
   return (
