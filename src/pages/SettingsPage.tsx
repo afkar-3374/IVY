@@ -11,6 +11,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Sparkles,
+  Keyboard,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { Avatar } from '../components/ui/Avatar';
@@ -39,6 +40,8 @@ const SettingsPage: React.FC = () => {
   const setNotifySound = useSettingsStore((state) => state.setNotifySound);
   const setNotifyVibration = useSettingsStore((state) => state.setNotifyVibration);
   const setDndEnabled = useSettingsStore((state) => state.setDndEnabled);
+  const ivyKeyboard = useSettingsStore((state) => state.ivyKeyboard);
+  const setIvyKeyboard = useSettingsStore((state) => state.setIvyKeyboard);
   const addToast = useUIStore((state) => state.addToast);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
@@ -145,6 +148,17 @@ const SettingsPage: React.FC = () => {
               <ChevronRight className="w-4 h-4 text-stone-400" />
             </div>
           </button>
+
+          <div className="w-full flex items-center justify-between gap-3 p-3.5">
+            <div className="flex items-center gap-3">
+              <Keyboard className="w-4 h-4 text-stone-500" />
+              <div>
+                <p className="text-xs font-bold text-stone-800 dark:text-stone-200">Ivy keyboard</p>
+                <p className="text-[10px] text-stone-500">Off: type in chat with your phone's keyboard</p>
+              </div>
+            </div>
+            <Switch checked={ivyKeyboard} onChange={setIvyKeyboard} />
+          </div>
 
           <button
             onClick={() => setNotificationsOpen((open) => !open)}
