@@ -31,7 +31,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   };
 
   return (
-    <div className={`relative inline-block flex-shrink-0 ${className}`}>
+    <div className={`relative inline-block flex-shrink-0 rounded-full align-middle ${className}`}>
       {src ? (
         <img
           src={src}

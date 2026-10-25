@@ -191,7 +191,7 @@ const ProfilePage: React.FC = () => {
   const activeTheme = THEMES.find((t) => t.id === theme) || THEMES[0];
 
   return (
-    <div className="flex-1 flex flex-col min-h-screen bg-stone-50 dark:bg-[#16151A] pb-24">
+    <div className="flex-1 flex flex-col min-h-full bg-stone-50 dark:bg-[#16151A] pb-24">
       {/* ── Header ── */}
       <div className="sticky top-0 z-30 bg-white/95 dark:bg-[#1E1D24]/95 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-stone-100 dark:border-stone-800 shadow-soft">
         <button
@@ -214,7 +214,7 @@ const ProfilePage: React.FC = () => {
         </button>
       </div>
 
-      <div className="p-4 space-y-4 max-w-lg mx-auto w-full">
+      <div className="p-4 space-y-4 w-full">
 
         {/* ── Avatar Card ── */}
         <div className="bg-white dark:bg-[#1E1D24] rounded-3xl shadow-soft border border-stone-100 dark:border-stone-800/80 p-6 flex flex-col items-center">

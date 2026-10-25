@@ -358,3 +358,7 @@
   0%, 40% { box-shadow: 0 0 0 100vmax rgba(224, 90, 116, 0.18); background-color: rgba(224, 90, 116, 0.18); }
   100% { box-shadow: 0 0 0 100vmax rgba(224, 90, 116, 0); background-color: rgba(224, 90, 116, 0); }
 }
+
+/* Horizontal chip rows: scroll by swiping, no scrollbar */
+.scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }

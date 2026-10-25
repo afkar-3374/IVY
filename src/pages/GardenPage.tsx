@@ -107,7 +107,7 @@ const GardenPage: React.FC = () => {
 
       {/* Scene */}
       <Reveal>
-        <div id="garden-scene" className="relative w-full aspect-[5/4] sm:aspect-[4/3] lg:aspect-[16/9] rounded-[2rem] overflow-hidden shadow-[0_30px_60px_-30px_rgba(120,40,90,0.55)] ring-1 ring-white/70 dark:ring-white/10">
+        <div id="garden-scene" className="relative w-full aspect-[5/4] sm:aspect-[16/10] lg:aspect-[16/9] max-h-[62vh] rounded-[2rem] overflow-hidden shadow-[0_30px_60px_-30px_rgba(120,40,90,0.55)] ring-1 ring-white/70 dark:ring-white/10">
           <GardenScene
             total={total}
             level={current.level}

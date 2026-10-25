@@ -193,7 +193,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const replyRef = replyTarget
       ? {
           id: replyTarget.local_uuid,
-          sender_name: replyTarget.sender_id === senderId ? 'You' : 'Partner',
+          sender_id: replyTarget.sender_id,
+          sender_name: '',
           content: replyTarget.content,
           message_type: replyTarget.message_type,
         }

@@ -121,7 +121,7 @@ export const KittyTimer: React.FC<KittyTimerProps> = ({ onSecretTap }) => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-between px-6 py-10 bg-gradient-to-b from-[#FFF4E8] via-[#FFE9EF] to-[#F3EDFF] dark:from-[#1B1722] dark:via-[#251B2A] dark:to-[#16151A] select-none">
+    <div className="min-h-[100dvh] flex flex-col items-center justify-between px-6 py-10 [@media(max-height:700px)]:py-5 gap-4 bg-gradient-to-b from-[#FFF4E8] via-[#FFE9EF] to-[#F3EDFF] dark:from-[#1B1722] dark:via-[#251B2A] dark:to-[#16151A] select-none">
       <div className="text-center">
         <h1 className="text-2xl font-bold text-stone-800 dark:text-stone-100 tracking-tight">Kitty Timer</h1>
         <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
@@ -130,7 +130,7 @@ export const KittyTimer: React.FC<KittyTimerProps> = ({ onSecretTap }) => {
       </div>
 
       {/* Kitty + progress ring */}
-      <div className="relative w-[280px] h-[280px] flex items-center justify-center">
+      <div className="relative w-[280px] h-[280px] [@media(max-height:700px)]:w-[210px] [@media(max-height:700px)]:h-[210px] shrink-0 flex items-center justify-center">
         <svg viewBox="0 0 280 280" className="absolute inset-0 -rotate-90" aria-hidden>
           <circle cx="140" cy="140" r={RING_RADIUS} fill="none" stroke="currentColor" strokeWidth="14" className="text-white/70 dark:text-white/10" />
           <circle
@@ -163,6 +163,7 @@ export const KittyTimer: React.FC<KittyTimerProps> = ({ onSecretTap }) => {
           <motion.svg
             width="170"
             height="170"
+            className="[@media(max-height:700px)]:w-[128px] [@media(max-height:700px)]:h-[128px]"
             viewBox="0 0 170 170"
             animate={running ? { y: [0, -6, 0] } : finished ? { y: [0, -14, 0] } : { y: 0 }}
             transition={{ duration: running ? 1.2 : 0.5, repeat: running || finished ? Infinity : 0, ease: 'easeInOut' }}
@@ -197,8 +198,8 @@ export const KittyTimer: React.FC<KittyTimerProps> = ({ onSecretTap }) => {
         </motion.button>
       </div>
 
-      <div className="w-full max-w-xs flex flex-col items-center gap-5">
-        <div className="text-6xl font-bold tabular-nums text-stone-800 dark:text-stone-100 tracking-tight">
+      <div className="w-full max-w-xs flex flex-col items-center gap-5 [@media(max-height:700px)]:gap-3">
+        <div className="text-6xl [@media(max-height:700px)]:text-5xl font-bold tabular-nums text-stone-800 dark:text-stone-100 tracking-tight">
           {formatTime(remaining)}
         </div>
 

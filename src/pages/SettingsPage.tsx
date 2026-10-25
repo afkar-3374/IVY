@@ -76,7 +76,7 @@ const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-screen bg-[#FDF8F6] dark:bg-[#16151A] pb-24">
+    <div className="flex-1 flex flex-col min-h-full bg-[#FDF8F6] dark:bg-[#16151A] pb-24">
       {/* Header */}
       <div className="p-4 flex items-center justify-between bg-white dark:bg-[#1E1D24] shadow-soft border-b border-stone-100 dark:border-stone-800">
         <button
@@ -89,24 +89,25 @@ const SettingsPage: React.FC = () => {
         <div className="w-6" />
       </div>
 
-      <div className="p-4 space-y-4 max-w-lg mx-auto w-full">
+      <div className="p-4 space-y-4 w-full">
         {/* Partner Profile Header Banner Card (Matches Mockup) */}
         <div
           onClick={() => navigate('/profile')}
           className="bg-white dark:bg-[#1E1D24] p-4 rounded-3xl shadow-soft border border-stone-100 dark:border-stone-800 flex items-center justify-between cursor-pointer active-scale"
         >
-          <div className="flex items-center gap-3">
-            <Avatar src={partnerUser.avatar_url} name={partnerDisplayName} size="lg" />
-            <div>
-              <h3 className="text-sm font-bold text-stone-900 dark:text-stone-100">
-                {partnerDisplayName}
+          {/* You: tap to edit your profile */}
+          <div className="flex items-center gap-3 min-w-0">
+            <Avatar src={currentUser?.avatar_url} name={currentUser?.display_name} size="lg" />
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-stone-900 dark:text-stone-100 truncate">
+                {currentUser?.display_name}
               </h3>
-              <p className="text-xs text-stone-500 dark:text-stone-400 line-clamp-1 max-w-[180px]">
-                {partnerUser.about}
+              <p className="text-xs text-stone-500 dark:text-stone-400 line-clamp-1">
+                {currentUser?.about || 'Tap to add something about you'}
               </p>
             </div>
           </div>
-          <ChevronRight className="w-5 h-5 text-stone-400" />
+          <ChevronRight className="w-5 h-5 text-stone-400 flex-shrink-0" />
         </div>
 
         {/* Options List Group */}
@@ -162,11 +163,11 @@ const SettingsPage: React.FC = () => {
           </button>
 
           <div className="w-full flex items-center justify-between gap-3 p-3.5">
-            <div className="flex items-center gap-3">
-              <Keyboard className="w-4 h-4 text-stone-500" />
-              <div>
+            <div className="flex items-center gap-3 min-w-0">
+              <Keyboard className="w-4 h-4 text-stone-500 flex-shrink-0" />
+              <div className="min-w-0">
                 <p className="text-xs font-bold text-stone-800 dark:text-stone-200">Ivy keyboard</p>
-                <p className="text-[10px] text-stone-500">Off: type in chat with your phone's keyboard</p>
+                <p className="text-[10px] text-stone-500">{ivyKeyboard ? "Ivy's own keyboard in the chat" : "Typing with your phone's keyboard"}</p>
               </div>
             </div>
             <Switch checked={ivyKeyboard} onChange={setIvyKeyboard} />

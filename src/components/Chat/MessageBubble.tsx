@@ -36,6 +36,8 @@ import { AudioPlayer } from './AudioPlayer';
 import { getFileCategory, getFileExtensionLabel } from '../../utils/fileIcons';
 import { URL_PATTERN, firstUrl } from '../../services/linkPreviewService';
 import { LinkPreviewCard } from './LinkPreviewCard';
+import { ReplyQuote } from './ReplyQuote';
+import { USER_1_ID, USER_2_ID } from '../../utils/constants';
 
 interface MessageBubbleProps {
   message: Message;
@@ -105,6 +107,15 @@ function isEmojiOnly(text: string): boolean {
 }
 
 
+/** "You" or your partner's name for a quoted message (older replies only stored a name). */
+function replyWho(ref: NonNullable<Message['reply_to_msg']>, me: string | undefined, partnerName: string): string {
+  // the old fixed names map back to the two accounts
+  const id = ref.sender_id ?? (ref.sender_name === 'Afkar' ? USER_1_ID : ref.sender_name === 'Princess' ? USER_2_ID : undefined);
+  if (id) return id === me ? 'You' : partnerName;
+  if (ref.sender_name === 'You') return 'You';
+  return partnerName;
+}
+
 const LONG_PRESS_MS = 450;
 
 /** Press and hold (touch) opens the menu; moving the finger (scrolling, swiping) cancels it. */
@@ -160,6 +171,7 @@ const MessageBubbleView: React.FC<MessageBubbleProps> = ({
   album,
 }) => {
   const currentUser = useAuthStore((state) => state.user);
+  const partnerName = useAuthStore((state) => state.user?.nickname || state.getPartnerProfile().display_name);
   const isMine = currentUser ? isMessageFromUser(message, currentUser.id) : false;
 
   const isVoiceNote =
@@ -193,13 +205,6 @@ const MessageBubbleView: React.FC<MessageBubbleProps> = ({
   const replyIconOpacity = useTransform(dragX, [6, 34], [0, 1]);
   const replyIconScale = useTransform(dragX, [6, 34], [0.4, 1]);
 
-  const getReplyIcon = (type?: string) => {
-    if (type === 'voice') return <Mic className="w-3 h-3 text-[#C95565]" />;
-    if (type === 'image') return <ImageIcon className="w-3 h-3 text-[#C95565]" />;
-    if (type === 'video') return <Video className="w-3 h-3 text-[#C95565]" />;
-    if (type === 'document' || type === 'file') return <FileText className="w-3 h-3 text-[#C95565]" />;
-    return <CornerDownLeft className="w-3 h-3 text-[#C95565]" />;
-  };
 
   const renderStatus = () => {
     if (!isMine) return null;
@@ -371,7 +376,7 @@ const MessageBubbleView: React.FC<MessageBubbleProps> = ({
       {/* Main Bubble Container: press and hold for the menu, like WhatsApp */}
       <div
         {...longPress.handlers}
-        className={`select-none [-webkit-touch-callout:none] ${
+        className={`select-none [-webkit-touch-callout:none] max-w-full min-w-0 ${
           bigEmoji ? 'relative px-1' : `wa-bubble ${isMine ? 'wa-out' : 'wa-in'} ${isFirstInGroup ? 'wa-tail' : ''} ${isMedia ? '!p-[3px]' : ''}`
         } ${message.deleted ? 'italic opacity-70' : ''}`}
       >
@@ -401,16 +406,15 @@ const MessageBubbleView: React.FC<MessageBubbleProps> = ({
                 onJumpToOriginal(message.reply_to);
               }
             }}
-            className={`mb-1 px-2.5 py-1.5 rounded-md text-xs border-l-4 border-[#E05A74] bg-black/[0.05] dark:bg-white/5 cursor-pointer hover:opacity-80 ${isMedia ? 'm-[3px]' : ''}`}
+            className={`mb-1 px-2.5 py-1.5 rounded-md border-l-4 border-[#E05A74] bg-black/[0.05] dark:bg-white/5 cursor-pointer hover:opacity-80 min-w-[9rem] ${isMedia ? 'm-[3px]' : ''}`}
             title="Tap to jump to original message"
           >
-            <p className="font-semibold text-[12.5px] text-[#E05A74] flex items-center gap-1">
-              {getReplyIcon(message.reply_to_msg.message_type)}
-              <span>{message.reply_to_msg.sender_name}</span>
-            </p>
-            <p className="truncate text-[13px] text-[#667781] dark:text-[#8696a0]">
-              {message.reply_to_msg.content}
-            </p>
+            <ReplyQuote
+              who={replyWho(message.reply_to_msg, currentUser?.id, partnerName)}
+              type={message.reply_to_msg.message_type}
+              content={message.reply_to_msg.content}
+              deleted={message.reply_to_msg.content === 'This message was deleted.'}
+            />
           </div>
         )}
 
@@ -509,7 +513,7 @@ const MessageBubbleView: React.FC<MessageBubbleProps> = ({
           </motion.p>
         ) : (
           /* Text Content (the invisible spacer keeps the time from overlapping the last line) */
-          <span className="whitespace-pre-wrap break-words">
+          <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
             {!message.deleted && firstUrl(message.content) && <LinkPreviewCard url={firstUrl(message.content)!} />}
             {renderText(message.content, highlight)}
             <span

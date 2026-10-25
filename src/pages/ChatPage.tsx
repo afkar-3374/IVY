@@ -37,6 +37,7 @@ import { MessageBubble } from '../components/Chat/MessageBubble';
 import { MessageActionModal } from '../components/Chat/MessageActionModal';
 import { EmojiPickerModal } from '../components/Chat/EmojiPickerModal';
 import { IvyKeyboard } from '../components/Chat/IvyKeyboard';
+import { ReplyQuote, replySummary } from '../components/Chat/ReplyQuote';
 import { ReactionsDetailModal } from '../components/Chat/ReactionsDetailModal';
 import { MediaViewerModal } from '../components/Chat/MediaViewerModal';
 import { ForwardMessageModal } from '../components/Chat/ForwardMessageModal';
@@ -688,13 +689,6 @@ const ChatPage: React.FC = () => {
       ? { backgroundImage: `url(${customWallpaperUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
       : undefined;
 
-  const getReplyIcon = (type?: string) => {
-    if (type === 'voice') return <Mic className="w-3.5 h-3.5 text-[#C95565]" />;
-    if (type === 'image') return <ImageIcon className="w-3.5 h-3.5 text-[#C95565]" />;
-    if (type === 'video') return <Video className="w-3.5 h-3.5 text-[#C95565]" />;
-    if (type === 'document' || type === 'file') return <FileText className="w-3.5 h-3.5 text-[#C95565]" />;
-    return <CornerDownLeft className="w-3.5 h-3.5 text-[#C95565]" />;
-  };
 
   // The message list only changes with the messages, never while typing: memoised so each
   // key press re-renders the input box, not hundreds of bubbles
@@ -842,12 +836,12 @@ const ChatPage: React.FC = () => {
 
           <div
             onClick={() => navigate('/chat/info')}
-            className="flex items-center gap-2.5 cursor-pointer min-w-0 flex-1 py-0.5 pr-2"
+            className="flex items-center gap-2 min-[400px]:gap-2.5 cursor-pointer min-w-0 flex-1 py-0.5 pr-1"
           >
             <Avatar src={partnerUser.avatar_url} name={partnerDisplayName} size="md" />
             <div className="min-w-0">
-              <h2 className="text-[16px] font-medium text-[#111b21] dark:text-[#e9edef] leading-tight flex items-center gap-1 truncate">
-                {partnerDisplayName}
+              <h2 className="text-[16px] font-medium text-[#111b21] dark:text-[#e9edef] leading-tight flex items-center gap-1 min-w-0">
+                <span className="truncate">{partnerDisplayName}</span>
                 {partnerUser.mood && <span title="Mood" className="text-sm leading-none">{partnerUser.mood}</span>}
               </h2>
               <p
@@ -868,7 +862,7 @@ const ChatPage: React.FC = () => {
                 useCallStore.getState().startCall(currentUser.id, partnerUser.id, 'video');
               }
             }}
-            className="p-2.5 rounded-full active:bg-black/5 dark:active:bg-white/5"
+            className="p-2 min-[400px]:p-2.5 rounded-full active:bg-black/5 dark:active:bg-white/5"
             title="Video call"
             aria-label="Video call"
           >
@@ -880,7 +874,7 @@ const ChatPage: React.FC = () => {
                 useCallStore.getState().startCall(currentUser.id, partnerUser.id, 'audio');
               }
             }}
-            className="p-2.5 rounded-full active:bg-black/5 dark:active:bg-white/5"
+            className="p-2 min-[400px]:p-2.5 rounded-full active:bg-black/5 dark:active:bg-white/5"
             title="Voice call"
             aria-label="Voice call"
           >
@@ -888,7 +882,7 @@ const ChatPage: React.FC = () => {
           </button>
           <button
             onClick={() => setIsSearchOpen(true)}
-            className="p-2.5 rounded-full active:bg-black/5 hover:bg-black/5 dark:hover:bg-white/5"
+            className="p-2 min-[400px]:p-2.5 rounded-full active:bg-black/5 hover:bg-black/5 dark:hover:bg-white/5"
             title="Search messages"
             aria-label="Search messages"
           >
@@ -896,7 +890,7 @@ const ChatPage: React.FC = () => {
           </button>
           <button
             onClick={() => navigate('/chat/info')}
-            className="p-2 rounded-full active:bg-black/5 dark:active:bg-white/5"
+            className="p-1.5 min-[400px]:p-2 rounded-full active:bg-black/5 dark:active:bg-white/5"
             title="Chat info"
             aria-label="Chat info"
           >
@@ -921,7 +915,10 @@ const ChatPage: React.FC = () => {
           <div className="text-[13px] truncate flex-1 min-w-0">
             <p className="text-[#E05A74] text-xs font-medium">Pinned message{pinnedMessages.length > 1 ? ` ${activePinnedIndex + 1}/${pinnedMessages.length}` : ''}</p>
             <p className="text-[#667781] dark:text-[#8696a0] truncate">
-              {pinnedMessages[activePinnedIndex % pinnedMessages.length].content}
+              {(() => {
+                const pin = pinnedMessages[activePinnedIndex % pinnedMessages.length];
+                return replySummary(pin.message_type, pin.content, pin.deleted);
+              })()}
             </p>
           </div>
           <Pin className="w-4 h-4 text-[#8696a0] flex-shrink-0" />
@@ -932,7 +929,7 @@ const ChatPage: React.FC = () => {
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-1.5 sm:px-[6%] pt-2 pb-3 relative"
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-1.5 sm:px-[6%] pt-2 pb-3 relative"
       >
         {isLoadingMessages && messages.length > 0 && hasMoreMessages && (
           <div className="flex justify-center py-2">
@@ -1043,24 +1040,18 @@ const ChatPage: React.FC = () => {
             {/* Reply / edit preview inside the box, like WhatsApp */}
             {(activeReplyTarget || editingMessage) && !isRecordingVoice && (
               <div className="m-1.5 mb-0 rounded-[10px] bg-black/[0.05] dark:bg-black/20 border-l-4 border-[#E05A74] pl-2.5 pr-1 py-1.5 flex items-start gap-2">
-                <div className="flex-1 min-w-0 text-[13px]">
-                  <p className="font-medium text-[#E05A74] flex items-center gap-1">
-                    {editingMessage ? (
-                      'Edit message'
-                    ) : (
-                      <>
-                        {getReplyIcon(activeReplyTarget!.message_type)}
-                        {activeReplyTarget!.sender_id === currentUser?.id ? 'You' : partnerDisplayName}
-                      </>
-                    )}
-                  </p>
-                  <p className="text-[#667781] dark:text-[#8696a0] truncate">
-                    {editingMessage
-                      ? editingMessage.content
-                      : activeReplyTarget!.deleted
-                      ? 'This message was deleted.'
-                      : activeReplyTarget!.content}
-                  </p>
+                <div className="flex-1 min-w-0">
+                  {editingMessage ? (
+                    <ReplyQuote who="Edit message" type="text" content={editingMessage.content} large />
+                  ) : (
+                    <ReplyQuote
+                      who={activeReplyTarget!.sender_id === currentUser?.id ? 'You' : partnerDisplayName}
+                      type={activeReplyTarget!.message_type}
+                      content={activeReplyTarget!.content}
+                      deleted={activeReplyTarget!.deleted}
+                      large
+                    />
+                  )}
                 </div>
                 <button
                   type="button"

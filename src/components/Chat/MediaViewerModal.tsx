@@ -67,8 +67,14 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({
     currentMsg?.message_type === 'file' ||
     (!isImage && !isVideo && currentMsg?.message_type !== 'voice' && currentMsg?.message_type !== 'text');
 
-  // List of media/document messages for next/prev navigation
-  const navigatableMessages = allMessages.filter((m) => !m.deleted && m.message_type !== 'system');
+  // Next/previous: photos and videos page through each other, documents through documents
+  const isVisual = (m: Message) =>
+    m.message_type === 'image' || m.message_type === 'video' || (typeof m.content === 'string' && /^data:(image|video)\//.test(m.content));
+  const isDoc = (m: Message) => m.message_type === 'document' || m.message_type === 'file';
+  const navigatableMessages = allMessages.filter(
+    (m) => !m.deleted && Boolean(m.content) && (isDocument ? isDoc(m) : isVisual(m))
+  );
+  const touchX = useRef<number | null>(null);
 
   const currentIndex = navigatableMessages.findIndex(
     (m) => m.local_uuid === currentMsg?.local_uuid || m.id === currentMsg?.id
@@ -285,6 +291,15 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({
         {/* Central Media/Document Viewport */}
         <div
           onWheel={handleWheelZoom}
+          onTouchStart={(e) => (touchX.current = e.touches.length === 1 && zoom === 1 ? e.touches[0].clientX : null)}
+          onTouchEnd={(e) => {
+            // swipe left/right for the next/previous photo (not while zoomed in)
+            if (touchX.current === null) return;
+            const dx = e.changedTouches[0].clientX - touchX.current;
+            touchX.current = null;
+            if (dx < -50) handleNext();
+            else if (dx > 50) handlePrev();
+          }}
           className="flex-1 flex items-center justify-center overflow-hidden relative my-2"
         >
           {/* Prev Arrow Button */}
@@ -383,8 +398,10 @@ export const MediaViewerModal: React.FC<MediaViewerModalProps> = ({
 
         {/* Bottom Status Footer */}
         <div className="text-center text-xs text-stone-400 py-1 flex items-center justify-between px-4 z-20">
-          <span>{isVideo ? 'Press Space to Play/Pause' : 'Use arrow keys to navigate'}</span>
-          {navigatableMessages.length > 0 && (
+          {/* keyboard hints only where there's a keyboard */}
+          <span className="hidden [@media(hover:hover)]:inline">{isVideo ? 'Press Space to Play/Pause' : 'Use arrow keys to navigate'}</span>
+          <span className="[@media(hover:hover)]:hidden">{navigatableMessages.length > 1 ? 'Swipe for more' : ''}</span>
+          {navigatableMessages.length > 1 && (
             <span>
               {currentIndex + 1} of {navigatableMessages.length}
             </span>

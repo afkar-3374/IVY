@@ -268,9 +268,16 @@ export const IvyKeyboard: React.FC<IvyKeyboardProps> = ({ inputRef, value, onCha
         <button type="button" aria-label="Use phone keyboard" title="Use phone keyboard" className="ivy-bar-btn" {...tapUp(onUsePhoneKeyboard)}>
           <Globe className="w-[18px] h-[18px]" />
         </button>
-        <div className="flex-1 flex items-center justify-around min-w-0">
-          {QUICK_EMOJI.map((emoji) => (
-            <button key={emoji} type="button" aria-label={emoji} className="ivy-bar-btn text-[20px]" {...press(() => insert(emoji))}>
+        <div className="flex-1 flex items-center justify-around min-w-0 overflow-hidden">
+          {QUICK_EMOJI.map((emoji, i) => (
+            <button
+              key={emoji}
+              type="button"
+              aria-label={emoji}
+              // narrow phones show fewer, so nothing runs into the hide button
+              className={`ivy-bar-btn text-[20px] shrink-0 ${i >= 6 ? 'max-[350px]:hidden' : ''}`}
+              {...press(() => insert(emoji))}
+            >
               {emoji}
             </button>
           ))}

@@ -39,6 +39,7 @@ import { formatDateSeparator, formatMessageTime } from '../utils/date';
 import { AudioPlayer } from '../components/Chat/AudioPlayer';
 import { MediaViewerModal } from '../components/Chat/MediaViewerModal';
 import type { Message } from '../types';
+import { replySummary } from '../components/Chat/ReplyQuote';
 
 type ActiveMediaTab = 'all' | 'photos' | 'videos' | 'voice' | 'files' | 'links' | 'starred' | 'pinned' | 'calls';
 
@@ -103,7 +104,7 @@ const ChatInfoPage: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-screen bg-[#FDF8F6] dark:bg-[#16151A] pb-24">
+    <div className="flex-1 flex flex-col min-h-full bg-[#FDF8F6] dark:bg-[#16151A] pb-24">
       {/* Header Bar */}
       <div className="p-4 flex items-center justify-between sticky top-0 z-30 bg-white/90 dark:bg-[#1E1D24]/90 backdrop-blur-md border-b border-stone-100 dark:border-stone-800">
         <button
@@ -506,7 +507,7 @@ const ChatInfoPage: React.FC = () => {
                     key={m.local_uuid}
                     className="p-3 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/30 flex items-center justify-between gap-3"
                   >
-                    <p className="text-xs text-stone-800 dark:text-stone-200 truncate flex-1">{m.content}</p>
+                    <p className="text-xs text-stone-800 dark:text-stone-200 truncate flex-1 min-w-0">{replySummary(m.message_type, m.content, m.deleted)}</p>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <button onClick={() => toggleStar(m.local_uuid)} className="text-amber-500 hover:text-stone-400">
                         <Star className="w-4 h-4 fill-amber-500" />
@@ -536,7 +537,7 @@ const ChatInfoPage: React.FC = () => {
                     key={m.local_uuid}
                     className="p-3 rounded-2xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/50 dark:border-rose-900/30 flex items-center justify-between gap-3"
                   >
-                    <p className="text-xs text-stone-800 dark:text-stone-200 truncate flex-1">{m.content}</p>
+                    <p className="text-xs text-stone-800 dark:text-stone-200 truncate flex-1 min-w-0">{replySummary(m.message_type, m.content, m.deleted)}</p>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <button onClick={() => togglePin(m.local_uuid)} className="text-[#C95565] hover:text-stone-400">
                         <Pin className="w-4 h-4" />

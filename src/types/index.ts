@@ -37,6 +37,8 @@ export interface MessageReaction {
 
 export interface ReplyReference {
   id: string;
+  /** Who wrote the quoted message (names are worked out when shown) */
+  sender_id?: string;
   sender_name: string;
   content: string;
   message_type: MessageType;

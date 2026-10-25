@@ -52,6 +52,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const isNarrowPage = ['/settings', '/profile', '/search', '/chat/info'].includes(location.pathname);
   // Phone: the chat screen has its own composer at the bottom, so no tab bar there
   const showNav = isUnlocked && location.pathname !== '/login';
+  // Detail screens (with their own back button) get the whole height on phones
+  const isDetail = ['/chat/info', '/search', '/profile'].includes(location.pathname);
 
   // Couple data (start date, special dates, love taps) while unlocked
   useEffect(() => {
@@ -155,13 +157,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             initial={reduceMotion ? false : { opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
-            className={isChat ? 'flex-1 min-h-0 flex flex-col' : 'relative z-[1]'}
+            className={isChat ? 'flex-1 min-h-0 flex flex-col' : 'relative z-[1] min-h-full flex flex-col'}
           >
-            {isNarrowPage ? <div className="w-full max-w-2xl mx-auto lg:py-4">{children}</div> : children}
+            {isNarrowPage ? <div className="w-full max-w-2xl mx-auto lg:py-4 flex-1 flex flex-col">{children}</div> : children}
           </motion.div>
         </main>
 
-        {showNav && !isChat && <BottomTabBar />}
+        {showNav && !isChat && !isDetail && <BottomTabBar />}
       </div>
 
       {/* Desktop: "Us" panel next to the chat */}

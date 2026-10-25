@@ -49,15 +49,15 @@ function resolveReplyReferences(msgs: Message[]): Message[] {
     if (m.reply_to) {
       const referenced = map.get(m.reply_to);
       if (referenced) {
-        const senderName = referenced.sender_id === USER_1_ID ? 'Afkar' : 'Princess';
         const displayContent = referenced.deleted ? 'This message was deleted.' : referenced.content;
         return {
           ...m,
           reply_to_msg: {
             id: referenced.local_uuid,
-            sender_name: senderName,
+            sender_id: referenced.sender_id,
+            sender_name: '',
             content: displayContent,
-            message_type: referenced.message_type || 'text',
+            message_type: referenced.deleted ? 'text' : referenced.message_type || 'text',
           },
         };
       } else if (!m.reply_to_msg) {

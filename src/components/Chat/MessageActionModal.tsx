@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Reply, Edit3, Trash2, Copy, Star, Pin, Plus, Share2, Info } from 'lucide-react';
 import type { Message } from '../../types';
 import { QUICK_EMOJIS } from '../../utils/constants';
+import { replySummary } from './ReplyQuote';
 
 interface MessageActionModalProps {
   isOpen: boolean;
@@ -65,7 +66,7 @@ export const MessageActionModal: React.FC<MessageActionModalProps> = ({
           <div className="w-12 h-1 bg-stone-300 dark:bg-stone-700 rounded-full mx-auto mb-4" />
 
           {/* Quick Reaction Bar (5 Default Emojis + 1 Choice Custom Plus Button) */}
-          <div className="flex items-center justify-around bg-stone-100 dark:bg-stone-800/80 p-2 rounded-full mb-4 shadow-inner">
+          <div className="flex items-center justify-between gap-0.5 bg-stone-100 dark:bg-stone-800/80 px-1.5 py-1.5 rounded-full mb-4 shadow-inner">
             {QUICK_EMOJIS.map((emoji) => (
               <button
                 key={emoji}
@@ -73,7 +74,7 @@ export const MessageActionModal: React.FC<MessageActionModalProps> = ({
                   onReactionSelect(emoji);
                   onClose();
                 }}
-                className="text-2xl hover:scale-125 transition-transform active-scale p-1"
+                className="text-[22px] min-[400px]:text-2xl leading-none hover:scale-125 transition-transform active-scale p-1 min-w-0 shrink"
                 title={`React with ${emoji}`}
               >
                 {emoji}
@@ -86,7 +87,7 @@ export const MessageActionModal: React.FC<MessageActionModalProps> = ({
                 onClose();
                 onOpenCustomEmojiPicker();
               }}
-              className="w-8 h-8 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200 flex items-center justify-center hover:scale-110 active-scale shadow-sm"
+              className="w-8 h-8 shrink-0 rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200 flex items-center justify-center hover:scale-110 active-scale shadow-sm"
               title="More Emojis"
             >
               <Plus className="w-5 h-5" />
@@ -96,7 +97,7 @@ export const MessageActionModal: React.FC<MessageActionModalProps> = ({
           {/* Message Content Preview */}
           <div className="p-3 bg-stone-50 dark:bg-stone-900/60 rounded-2xl mb-4 border border-stone-200/50 dark:border-stone-800">
             <p className="text-xs text-stone-600 dark:text-stone-300 line-clamp-2 italic">
-              "{message.message_type === 'voice' ? '🎵 Voice Note' : message.content}"
+              {message.message_type === 'text' ? `"${message.content}"` : replySummary(message.message_type, message.content, message.deleted)}
             </p>
           </div>
 

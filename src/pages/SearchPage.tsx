@@ -36,7 +36,8 @@ const SearchPage: React.FC = () => {
       return m.pinned;
     }
 
-    const matchesQuery = !query.trim() || m.content.toLowerCase().includes(query.toLowerCase());
+    // photos and files are links: only text can match what you type
+    const matchesQuery = !query.trim() || (m.message_type === 'text' && m.content.toLowerCase().includes(query.toLowerCase()));
     return matchesQuery;
   });
 
@@ -60,7 +61,7 @@ const SearchPage: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-screen bg-[#FDF8F6] dark:bg-[#16151A] pb-20">
+    <div className="flex-1 flex flex-col min-h-full bg-[#FDF8F6] dark:bg-[#16151A] pb-20">
       {/* Search Header */}
       <div className="p-4 bg-white dark:bg-[#1E1D24] shadow-soft border-b border-stone-100 dark:border-stone-800">
         <div className="flex items-center gap-3 mb-3">

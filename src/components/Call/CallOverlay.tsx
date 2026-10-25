@@ -411,7 +411,7 @@ export const CallOverlay: React.FC = () => {
           </div>
         )}
         {isConnected && (
-          <p className="mt-4 text-center text-[10px] text-white/25 select-none">
+          <p className="mt-4 text-center text-[10px] text-white/25 select-none hidden [@media(hover:hover)]:block">
             Space to mute · Esc to end call
           </p>
         )}
@@ -508,7 +508,7 @@ export const CallOverlay: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* ── Local video PiP (bottom-right corner) ── */}
+      {/* ── Local video PiP (top-right, clear of the name and the controls) ── */}
       <AnimatePresence>
         {isConnected && !localPipMinimized && (
           <motion.div
@@ -517,7 +517,7 @@ export const CallOverlay: React.FC = () => {
             animate={{ opacity: 1, scale: 1, x: 0 }}
             exit={{ opacity: 0, scale: 0.8, x: 20 }}
             transition={{ duration: 0.3 }}
-            className="absolute bottom-32 right-4 z-20 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 cursor-pointer active:scale-95 transition-transform"
+            className="absolute top-[calc(env(safe-area-inset-top)+4.5rem)] right-4 z-20 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 cursor-pointer active:scale-95 transition-transform"
             style={{ width: 100, height: 140 }}
             onClick={(e) => { e.stopPropagation(); setLocalPipMinimized(true); }}
             title="Tap to minimize preview"
@@ -553,7 +553,7 @@ export const CallOverlay: React.FC = () => {
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
-            className="absolute bottom-32 right-4 z-20 w-12 h-12 rounded-full bg-white/15 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl active:scale-90 transition-transform"
+            className="absolute top-[calc(env(safe-area-inset-top)+4.5rem)] right-4 z-20 w-12 h-12 rounded-full bg-white/15 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl active:scale-90 transition-transform"
             onClick={(e) => { e.stopPropagation(); setLocalPipMinimized(false); }}
             aria-label="Restore camera preview"
           >
@@ -694,7 +694,7 @@ export const CallOverlay: React.FC = () => {
             )}
 
             {isConnected && (
-              <p className="mt-3 text-center text-[10px] text-white/20 select-none">
+              <p className="mt-3 text-center text-[10px] text-white/20 select-none hidden [@media(hover:hover)]:block">
                 Space · mute &nbsp;|&nbsp; V · camera &nbsp;|&nbsp; F · fullscreen &nbsp;|&nbsp; Esc · end
               </p>
             )}

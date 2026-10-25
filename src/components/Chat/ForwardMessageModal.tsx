@@ -4,6 +4,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { useChatStore } from '../../store/useChatStore';
 import { Avatar } from '../ui/Avatar';
 import type { Message } from '../../types';
+import { replySummary } from './ReplyQuote';
 
 interface ForwardMessageModalProps {
   isOpen: boolean;
@@ -33,8 +34,8 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
   const partnerDisplayName = currentUser.nickname || partnerUser.display_name;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-[#1E1D24] rounded-2xl p-5 w-full max-w-sm shadow-soft border border-stone-100 dark:border-stone-800 animate-scaleUp">
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="bg-white dark:bg-[#1E1D24] rounded-2xl p-5 w-full max-w-sm shadow-soft border border-stone-100 dark:border-stone-800 animate-scaleUp">
         <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-stone-800">
           <h3 className="text-base font-bold text-stone-900 dark:text-stone-100">Forward Message</h3>
           <button onClick={onClose} className="p-1 rounded-full text-stone-400 hover:text-stone-600">
@@ -47,7 +48,7 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
           <span className="text-[10px] font-bold text-[#C95565] uppercase tracking-wider block mb-1">
             Message Preview
           </span>
-          <p className="text-xs text-stone-700 dark:text-stone-300 italic truncate">{message.content}</p>
+          <p className="text-xs text-stone-700 dark:text-stone-300 italic truncate">{replySummary(message.message_type, message.content)}</p>
         </div>
 
         {/* Partner Selection Row */}
