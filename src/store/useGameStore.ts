@@ -7,6 +7,7 @@ import {
   type GardenBuild,
   type PointRow,
   type PointSource,
+  type WorldAvatar,
   type TicTacToe,
 } from '../services/gameService';
 import { useAuthStore } from './useAuthStore';
@@ -19,6 +20,10 @@ interface GameState {
   answers: Record<string, GameAnswer[]>;
   board: TicTacToe | null;
   builds: GardenBuild[];
+  /** Both of your outfits/wardrobes in the world */
+  avatars: WorldAvatar[];
+  /** Save your own outfit/wardrobe (merged into what's there) */
+  saveAvatar: (patch: Partial<Omit<WorldAvatar, 'user_id'>>) => Promise<boolean>;
   /** Item most recently built (by either partner), for the build animation */
   justBuilt: string | null;
   loaded: boolean;
@@ -40,13 +45,19 @@ export const useGameStore = create<GameState>((set, get) => ({
   answers: {},
   board: null,
   builds: [],
+  avatars: [],
   justBuilt: null,
   loaded: false,
 
   init: () => {
     void (async () => {
-      const [points, board, builds] = await Promise.all([gameService.getPoints(), gameService.getBoard(), gameService.getBuilds()]);
-      set({ points, board, builds, loaded: true });
+      const [points, board, builds, avatars] = await Promise.all([
+        gameService.getPoints(),
+        gameService.getBoard(),
+        gameService.getBuilds(),
+        gameService.getAvatars(),
+      ]);
+      set({ points, board, builds, avatars, loaded: true });
     })();
     return gameService.subscribe({
       onBuild: (row) => {
@@ -55,6 +66,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         const me = useAuthStore.getState().user?.id;
         if (row.built_by !== me) useUIStore.getState().addToast('Something new was built in your garden 🏗️💞', 'success');
       },
+      onAvatar: (row) => set((s) => ({ avatars: [...s.avatars.filter((a) => a.user_id !== row.user_id), row] })),
       onBuildMoved: (row) => set((s) => ({ builds: s.builds.map((b) => (b.item === row.item ? { ...b, ...row } : b)) })),
       onPoint: (row) => set((s) => (s.points.some((p) => p.id === row.id || (p.ref === row.ref && p.user_id === row.user_id))
         ? { points: s.points.map((p) => (p.ref === row.ref && p.user_id === row.user_id ? row : p)) }
@@ -98,6 +110,23 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   refreshBoard: async () => set({ board: await gameService.getBoard() }),
+
+  saveAvatar: async (patch) => {
+    const me = useAuthStore.getState().user?.id;
+    if (!me) return false;
+    const current = get().avatars.find((a) => a.user_id === me) ?? { user_id: me, look: {}, owned: [], spent: 0 };
+    const next: WorldAvatar = { ...current, ...patch, user_id: me };
+    set((s) => ({ avatars: [...s.avatars.filter((a) => a.user_id !== me), next] }));
+    try {
+      await gameService.saveAvatar(next);
+      return true;
+    } catch (err) {
+      logger.error('Unable to save avatar:', err);
+      set((s) => ({ avatars: [...s.avatars.filter((a) => a.user_id !== me), current] }));
+      useUIStore.getState().addToast('Could not save — check your connection', 'error');
+      return false;
+    }
+  },
 
   place: async (item, layout, save = true) => {
     set((s) => ({ builds: s.builds.map((b) => (b.item === item ? { ...b, ...layout } : b)) }));

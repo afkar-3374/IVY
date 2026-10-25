@@ -2,22 +2,44 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronLeft, Move, Palette, Check, RotateCcw, RotateCw, Undo2, LogOut, ArrowDownToLine, Heart } from 'lucide-react';
+import { ChevronLeft, Move, Shirt, Check, RotateCcw, RotateCw, Undo2, LogOut, ArrowDownToLine, Heart, Target } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useGameStore } from '../store/useGameStore';
 import { useCoupleStore } from '../store/useCoupleStore';
 import { useUIStore } from '../store/useUIStore';
-import { gardenLevel, sumBy } from '../utils/scores';
-import { dayIndex } from '../data/gameQuestions';
+import { gardenLevel, loveCoins, sumBy } from '../utils/scores';
+import { dayIndex, todayKey } from '../data/gameQuestions';
 import { GARDEN_ITEMS, ITEM_BY_ID } from '../data/gardenItems';
 import { USER_1_ID } from '../utils/constants';
 import { Avatar } from '../components/ui/Avatar';
 import { gardenWeather, type Phase } from '../components/Garden/GardenScene';
 import { WorldScene } from '../components/World/WorldScene';
 import { Joystick } from '../components/World/Joystick';
-import { HAIRS, OUTFITS, live, loadLook, useWorldUI } from '../components/World/worldState';
-import { interactables, placeBuilds, WORLD_SPOTS } from '../components/World/worldData';
-import { activate, climbDown, emote, hugPartner, joinWorld, leaveArea, standUp, type ActionHelpers } from '../components/World/worldActions';
+import { DressingPanel } from '../components/World/DressingPanel';
+import { live, resetVehicles, useWorldUI } from '../components/World/worldState';
+import {
+  ACTIVITIES,
+  ACTIVITY_POINTS,
+  TOGETHER_POINTS,
+  VEHICLES,
+  interactables,
+  placeBuilds,
+  vehicleInteractables,
+  WORLD_SPOTS,
+} from '../components/World/worldData';
+import { clothKey, completeLook, type Cloth, type Look } from '../components/World/wardrobe';
+import {
+  activate,
+  climbDown,
+  emote,
+  enterDressing,
+  hugPartner,
+  joinWorld,
+  leaveArea,
+  leaveDressing,
+  standUp,
+  type ActionHelpers,
+} from '../components/World/worldActions';
 
 function phaseFor(hour: number): Phase {
   if (hour >= 6 && hour < 17) return 'day';
@@ -28,7 +50,7 @@ function phaseFor(hour: number): Phase {
 const HINT_KEY = 'ivy_world_hint_seen';
 const glass = 'bg-white/70 dark:bg-stone-900/60 backdrop-blur-md ring-1 ring-white/60 dark:ring-white/10 shadow-lg';
 
-/** Our 3D world: walk around together, sit on the swing, go inside our home, arrange everything. */
+/** Our 3D world: walk around together, ride things, dress up, arrange everything. */
 const WorldPage: React.FC = () => {
   const navigate = useNavigate();
   const me = useAuthStore((s) => s.user);
@@ -37,7 +59,10 @@ const WorldPage: React.FC = () => {
   const myName = me?.display_name || 'Me';
   const points = useGameStore((s) => s.points);
   const builds = useGameStore((s) => s.builds);
+  const avatars = useGameStore((s) => s.avatars);
   const place = useGameStore((s) => s.place);
+  const award = useGameStore((s) => s.award);
+  const saveAvatar = useGameStore((s) => s.saveAvatar);
   const sendLove = useCoupleStore((s) => s.sendLove);
   const addToast = useUIStore((s) => s.addToast);
 
@@ -48,12 +73,10 @@ const WorldPage: React.FC = () => {
   const canHug = useWorldUI((s) => s.canHug);
   const selected = useWorldUI((s) => s.selected);
   const partnerHere = useWorldUI((s) => s.partner);
-  const look = useWorldUI((s) => s.look);
-  const setLook = useWorldUI((s) => s.setLook);
+  const questsOpen = useWorldUI((s) => s.questsOpen);
   const setMode = useWorldUI((s) => s.setMode);
 
   const [phase, setPhase] = useState<Phase>(() => phaseFor(new Date().getHours()));
-  const [dressing, setDressing] = useState(false);
   // the balloon's landing state lives outside React; re-render when you ask to land
   const [, rerender] = useState(0);
   const [hint, setHint] = useState(() => {
@@ -64,23 +87,47 @@ const WorldPage: React.FC = () => {
     }
   });
 
+  const isFirst = me?.id === USER_1_ID;
   const total = sumBy(points);
+  const coins = loveCoins(points, builds, avatars);
   const { current } = gardenLevel(total);
   const { season, weather, label: weatherLabel } = gardenWeather(new Date(), dayIndex());
   const placements = useMemo(() => placeBuilds(builds), [builds]);
   const list = useMemo(() => interactables(area, placements), [area, placements]);
   const builtIds = new Set(builds.map((b) => b.item));
   const toBuild = GARDEN_ITEMS.filter((i) => !builtIds.has(i.id)).length;
-  const isFirst = me?.id === USER_1_ID;
+
+  // Outfits: yours (a draft while you're in the dressing room) and your partner's, saved and live
+  const mine = avatars.find((a) => a.user_id === me?.id);
+  const theirs = avatars.find((a) => a.user_id === partner.id);
+  const savedLook = useMemo(() => completeLook(mine?.look as Partial<Look>, isFirst), [mine?.look, isFirst]);
+  const partnerLook = useMemo(() => completeLook(theirs?.look as Partial<Look>, !isFirst), [theirs?.look, isFirst]);
+  const [draft, setDraft] = useState<Look | null>(null);
+  const myLook = area === 'dressing' && draft ? draft : savedLook;
+
+  // Today's activities
+  const today = todayKey();
+  const doneRefs = new Set(points.filter((p) => p.user_id === me?.id && p.ref.startsWith('world:') && p.ref.endsWith(`:${today}`)).map((p) => p.ref));
+  const isDone = (key: string) => doneRefs.has(`world:${key}:${today}`);
+  const doneCount = ACTIVITIES.filter((a) => isDone(a.key)).length;
+  const earnedToday = points
+    .filter((p) => p.user_id === me?.id && p.source === 'world' && p.ref.endsWith(`:${today}`))
+    .reduce((t, p) => t + p.points, 0);
+
+  const reward = useCallback(
+    (key: string, together = false) => {
+      void award('world', together ? TOGETHER_POINTS : ACTIVITY_POINTS, `world:${together ? `${key}-together` : key}:${todayKey()}`);
+    },
+    [award]
+  );
 
   const helpers: ActionHelpers = useMemo(
-    () => ({ placements, partnerName, toast: addToast, loveTap: () => void sendLove('tap') }),
-    [placements, partnerName, addToast, sendLove]
+    () => ({ placements, partnerName, isFirst, toast: addToast, loveTap: () => void sendLove('tap'), reward }),
+    [placements, partnerName, isFirst, addToast, sendLove, reward]
   );
 
   // Start fresh by the love tree each visit, side by side
   useEffect(() => {
-    loadLook({ outfit: isFirst ? '#60A5FA' : '#F472B6', hair: '#2B1B17', short: isFirst });
     Object.assign(live.me, { x: isFirst ? -0.9 : 0.9, y: 0, z: 4.5, ry: Math.PI, tilt: 0, pose: 'stand', moving: false });
     live.yaw = 0.25;
     live.pitch = 0.4;
@@ -88,8 +135,12 @@ const WorldPage: React.FC = () => {
     live.target = null;
     live.ride = null;
     live.teleported += 1;
-    useWorldUI.setState({ mode: 'play', area: 'out', seat: null, nearby: null, selected: null });
-    const leave = joinWorld((here) => addToast(here ? `${partnerName} came into our world 💞` : `${partnerName} left our world`, here ? 'success' : 'info'));
+    resetVehicles();
+    useWorldUI.setState({ mode: 'play', area: 'out', seat: null, nearby: null, selected: null, questsOpen: false });
+    const leave = joinWorld(
+      (here) => addToast(here ? `${partnerName} came into our world 💞` : `${partnerName} left our world`, here ? 'success' : 'info'),
+      () => reward('hug')
+    );
     const t = setInterval(() => setPhase(phaseFor(new Date().getHours())), 60_000);
     return () => {
       leave();
@@ -97,12 +148,18 @@ const WorldPage: React.FC = () => {
       live.joy.x = 0;
       live.joy.y = 0;
     };
-  }, [isFirst, partnerName, addToast]);
+  }, [isFirst, partnerName, addToast, reward]);
 
   // If the cottage or tree house disappears while you're in it, step back outside
   useEffect(() => {
     if ((area === 'home' && !builtIds.has('cottage')) || (area === 'treehouse' && !builtIds.has('treehouse'))) leaveArea();
   });
+
+  // Entering the dressing room starts a draft of your saved look
+  useEffect(() => {
+    if (area === 'dressing') setDraft((d) => d ?? savedLook);
+    else setDraft(null);
+  }, [area, savedLook]);
 
   useEffect(() => {
     if (!hint) return;
@@ -125,13 +182,51 @@ const WorldPage: React.FC = () => {
     [placements, place]
   );
 
+  const buy = async (c: Cloth, look: Look) => {
+    if (coins < c.cost) {
+      addToast(`You need ${c.cost - coins} more love coins — play together to earn them 💗`, 'info');
+      return false;
+    }
+    const ok = await saveAvatar({ look, owned: [...(mine?.owned ?? []), clothKey(c)], spent: (mine?.spent ?? 0) + c.cost });
+    if (ok) {
+      setDraft(look);
+      addToast(`${c.emoji} ${c.name} is yours!`, 'success');
+      navigator.vibrate?.([40, 30, 80]);
+    }
+    return ok;
+  };
+
+  const saveOutfit = async () => {
+    if (draft && JSON.stringify(draft) !== JSON.stringify(savedLook)) {
+      const ok = await saveAvatar({ look: draft, owned: mine?.owned ?? [], spent: mine?.spent ?? 0 });
+      if (ok) addToast('Outfit saved 👗', 'success');
+    }
+    leaveDressing();
+  };
+
   const sel = selected ? placements.find((p) => p.id === selected) : undefined;
-  const near = nearby ? list.find((i) => i.key === nearby) : undefined;
-  const seatIt = seat ? list.find((i) => i.key === seat.key) : undefined;
+  const all = area === 'out' ? [...list, ...vehicleInteractables(live.vehicles)] : list;
+  const near = nearby ? all.find((i) => i.key === nearby) : undefined;
+  const seatIt = seat ? all.find((i) => i.key === seat.key) : undefined;
   const flying = seatIt?.action === 'ride' && live.ride !== null && live.ride.landAt === null;
+  const driving = Boolean(seat && seat.idx === 0 && VEHICLES[seat.key]);
+  const showStick = !seat || driving;
 
   const turn = (by: number) => sel && void place(sel.id, { x: sel.x, z: sel.z, rot: sel.rot + by, size: sel.size });
   const resize = (size: number, save: boolean) => sel && void place(sel.id, { x: sel.x, z: sel.z, rot: sel.rot, size }, save);
+
+  const standLabel =
+    seatIt?.action === 'ride'
+      ? flying
+        ? '🎈 Land the balloon'
+        : '🎈 Landing…'
+      : seatIt?.vehicle
+        ? seat?.idx === 0
+          ? 'Park & get out'
+          : 'Get out'
+        : seatIt?.action === 'train' || seatIt?.action === 'ferris'
+          ? 'Get off'
+          : 'Stand up';
 
   const ui = (
     <div className="fixed inset-0 z-[45] bg-sky-200 select-none overflow-hidden" style={{ touchAction: 'none' }}>
@@ -144,100 +239,111 @@ const WorldPage: React.FC = () => {
         weather={weather}
         myName={myName}
         partnerName={partnerName}
+        myLook={myLook}
+        partnerLook={partnerLook}
         helpers={helpers}
         onMove={onMove}
       />
 
       {/* Top bar */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 p-3 pt-[max(env(safe-area-inset-top),0.75rem)] flex items-start justify-between gap-2">
-        <div className="flex flex-col gap-2 items-start">
-          <button
-            onClick={() => (mode === 'edit' ? setMode('play') : navigate('/garden'))}
-            className={`pointer-events-auto ${glass} rounded-full pl-2 pr-3.5 py-2 flex items-center gap-1 text-sm font-semibold text-stone-700 dark:text-stone-100 active:scale-95 transition-transform`}
-          >
-            <ChevronLeft className="w-4 h-4" /> {mode === 'edit' ? 'Done' : 'Garden'}
-          </button>
-          {mode === 'play' && (
-            <div className={`${glass} rounded-full px-3 py-1 text-[11px] font-medium text-stone-600 dark:text-stone-200`}>
-              {area === 'home' ? '🏡 Our home' : area === 'treehouse' ? '🌳 Tree house' : weatherLabel}
+      {area !== 'dressing' && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 p-3 pt-[max(env(safe-area-inset-top),0.75rem)] flex items-start justify-between gap-2">
+          <div className="flex flex-col gap-2 items-start">
+            <button
+              onClick={() => (mode === 'edit' ? setMode('play') : navigate('/garden'))}
+              className={`pointer-events-auto ${glass} rounded-full pl-2 pr-3.5 py-2 flex items-center gap-1 text-sm font-semibold text-stone-700 dark:text-stone-100 active:scale-95 transition-transform`}
+            >
+              <ChevronLeft className="w-4 h-4" /> {mode === 'edit' ? 'Done' : 'Garden'}
+            </button>
+            {mode === 'play' && (
+              <>
+                <div className={`${glass} rounded-full px-3 py-1 text-[11px] font-medium text-stone-600 dark:text-stone-200`}>
+                  {area === 'home' ? '🏡 Our home' : area === 'treehouse' ? '🌳 Tree house' : weatherLabel}
+                </div>
+                <button
+                  onClick={() => useWorldUI.setState({ questsOpen: !questsOpen })}
+                  className={`pointer-events-auto ${glass} rounded-full px-3 py-1.5 text-[11px] font-semibold text-stone-700 dark:text-stone-100 flex items-center gap-1.5`}
+                >
+                  <Target className="w-3.5 h-3.5 text-[#E05A74]" /> {doneCount}/{ACTIVITIES.length} today · +{earnedToday} 💗
+                </button>
+              </>
+            )}
+          </div>
+
+          {mode === 'play' ? (
+            <div className="flex flex-col items-end gap-2">
+              <button
+                onClick={() => !partnerHere && sendLove('tap')}
+                className={`pointer-events-auto ${glass} rounded-full pl-1 pr-3 py-1 flex items-center gap-1.5 text-xs font-semibold text-stone-700 dark:text-stone-100`}
+                title={partnerHere ? `${partnerName} is here` : `Send ${partnerName} a love tap`}
+              >
+                <Avatar src={partner.avatar_url} name={partnerName} size="sm" isOnline={Boolean(partnerHere)} />
+                {partnerHere ? `${partnerName} is here 💞` : `Call ${partnerName} 💗`}
+              </button>
+              <div className="flex gap-2">
+                {area === 'out' && (
+                  <>
+                    <button
+                      onClick={() => {
+                        if (seat) standUp(all, placements);
+                        enterDressing(isFirst);
+                        reward('boutique');
+                      }}
+                      className={`pointer-events-auto ${glass} h-10 rounded-full px-3 flex items-center gap-1.5 text-sm font-semibold text-stone-700 dark:text-stone-100 active:scale-95`}
+                      aria-label="Dressing room"
+                    >
+                      <Shirt className="w-4 h-4" /> Dress
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (seat) standUp(all, placements);
+                        setMode('edit');
+                      }}
+                      className={`pointer-events-auto ${glass} h-10 rounded-full px-3 flex items-center gap-1.5 text-sm font-semibold text-stone-700 dark:text-stone-100 active:scale-95`}
+                    >
+                      <Move className="w-4 h-4" /> Arrange
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className={`${glass} rounded-2xl px-3.5 py-2 text-xs text-stone-600 dark:text-stone-200 max-w-[13rem] text-right`}>
+              <p className="font-semibold text-stone-800 dark:text-stone-100">Arrange our world</p>
+              Tap a build, then drag it. Drag empty space to look around.
             </div>
           )}
         </div>
+      )}
 
-        {mode === 'play' ? (
-          <div className="flex flex-col items-end gap-2">
-            <button
-              onClick={() => !partnerHere && sendLove('tap')}
-              className={`pointer-events-auto ${glass} rounded-full pl-1 pr-3 py-1 flex items-center gap-1.5 text-xs font-semibold text-stone-700 dark:text-stone-100`}
-              title={partnerHere ? `${partnerName} is here` : `Send ${partnerName} a love tap`}
-            >
-              <Avatar src={partner.avatar_url} name={partnerName} size="sm" isOnline={Boolean(partnerHere)} />
-              {partnerHere ? `${partnerName} is here 💞` : `Call ${partnerName} 💗`}
-            </button>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setDressing((d) => !d)}
-                className={`pointer-events-auto ${glass} w-10 h-10 rounded-full flex items-center justify-center text-stone-700 dark:text-stone-100 active:scale-95`}
-                aria-label="Change your look"
-              >
-                <Palette className="w-[18px] h-[18px]" />
-              </button>
-              {area === 'out' && (
-                <button
-                  onClick={() => {
-                    if (seat) standUp(list, placements);
-                    setDressing(false);
-                    setMode('edit');
-                  }}
-                  className={`pointer-events-auto ${glass} h-10 rounded-full px-3.5 flex items-center gap-1.5 text-sm font-semibold text-stone-700 dark:text-stone-100 active:scale-95`}
-                >
-                  <Move className="w-4 h-4" /> Arrange
-                </button>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className={`${glass} rounded-2xl px-3.5 py-2 text-xs text-stone-600 dark:text-stone-200 max-w-[13rem] text-right`}>
-            <p className="font-semibold text-stone-800 dark:text-stone-100">Arrange our world</p>
-            Tap a build, then drag it. Drag empty space to look around.
-          </div>
-        )}
-      </div>
-
-      {/* Outfit picker */}
+      {/* Today in our world */}
       <AnimatePresence>
-        {dressing && mode === 'play' && (
+        {questsOpen && mode === 'play' && area !== 'dressing' && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className={`absolute right-3 top-32 ${glass} rounded-3xl p-4 w-64`}
+            className={`absolute left-3 top-40 ${glass} rounded-3xl p-3 w-72 max-w-[calc(100vw-1.5rem)] max-h-[50vh] overflow-y-auto`}
           >
-            <p className="text-[11px] font-bold uppercase tracking-wider text-[#E05A74] mb-2">Outfit</p>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {OUTFITS.map((c) => (
-                <button key={c} onClick={() => setLook({ outfit: c })} className={`w-8 h-8 rounded-full ring-2 ${look.outfit === c ? 'ring-[#E05A74] scale-110' : 'ring-white'}`} style={{ background: c }} aria-label={`Outfit ${c}`} />
-              ))}
-            </div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-[#E05A74] mb-2">Hair</p>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {HAIRS.map((c) => (
-                <button key={c} onClick={() => setLook({ hair: c })} className={`w-8 h-8 rounded-full ring-2 ${look.hair === c ? 'ring-[#E05A74] scale-110' : 'ring-white'}`} style={{ background: c }} aria-label={`Hair ${c}`} />
-              ))}
-            </div>
-            <div className="flex gap-2">
-              {[
-                { short: true, label: 'Short' },
-                { short: false, label: 'Ponytail' },
-              ].map((o) => (
-                <button
-                  key={o.label}
-                  onClick={() => setLook({ short: o.short })}
-                  className={`flex-1 rounded-full py-1.5 text-xs font-semibold ${look.short === o.short ? 'btn-gloss' : 'bg-white/70 dark:bg-white/10 text-stone-600 dark:text-stone-200'}`}
-                >
-                  {o.label}
-                </button>
-              ))}
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#E05A74]">Today in our world</p>
+            <p className="text-[11px] text-stone-500 dark:text-stone-400 mb-2">
+              +{ACTIVITY_POINTS} for each, +{TOGETHER_POINTS} more when you do it together 💞
+            </p>
+            <div className="flex flex-col gap-1">
+              {ACTIVITIES.map((a) => {
+                const done = isDone(a.key);
+                const both = doneRefs.has(`world:${a.key}-together:${today}`);
+                return (
+                  <div key={a.key} className={`flex items-center justify-between rounded-xl px-2.5 py-1.5 text-xs ${done ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-white/60 dark:bg-white/5'}`}>
+                    <span className={done ? 'text-emerald-700 dark:text-emerald-300 font-semibold' : 'text-stone-700 dark:text-stone-200'}>
+                      {a.emoji} {a.label}
+                    </span>
+                    <span className="text-[10px] font-semibold whitespace-nowrap">
+                      {both ? '💞 ✓' : done ? '✓' : <span className="text-stone-400">+{ACTIVITY_POINTS}</span>}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </motion.div>
         )}
@@ -245,7 +351,7 @@ const WorldPage: React.FC = () => {
 
       {/* First-visit hint */}
       <AnimatePresence>
-        {hint && mode === 'play' && (
+        {hint && mode === 'play' && area === 'out' && (
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -259,9 +365,11 @@ const WorldPage: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {mode === 'play' ? (
+      {area === 'dressing' && draft ? (
+        <DressingPanel look={draft} owned={mine?.owned ?? []} coins={coins} onChange={setDraft} onBuy={buy} onDone={saveOutfit} />
+      ) : mode === 'play' ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4 pb-[max(env(safe-area-inset-bottom),1rem)] flex items-end justify-between gap-3">
-          <div className={`pointer-events-auto ${seat ? 'opacity-0 pointer-events-none' : ''}`}>
+          <div className={showStick ? 'pointer-events-auto' : 'opacity-0 pointer-events-none'}>
             <Joystick />
           </div>
 
@@ -285,12 +393,12 @@ const WorldPage: React.FC = () => {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 10 }}
                   onClick={() => {
-                    standUp(list, placements);
+                    standUp(all, placements);
                     rerender((n) => n + 1);
                   }}
                   className="pointer-events-auto btn-gloss rounded-full px-5 py-3 text-sm font-semibold shadow-xl"
                 >
-                  {flying ? '🎈 Land the balloon' : seatIt?.action === 'ride' ? '🎈 Landing…' : 'Stand up'}
+                  {standLabel}
                 </motion.button>
               ) : near ? (
                 <motion.button
@@ -316,7 +424,7 @@ const WorldPage: React.FC = () => {
               👋
             </button>
             <button
-              onClick={() => hugPartner()}
+              onClick={() => hugPartner(helpers)}
               disabled={!canHug}
               className={`${glass} w-12 h-12 rounded-full text-xl active:scale-90 transition-transform disabled:opacity-40`}
               aria-label={canHug ? `Hug ${partnerName}` : `Walk up to ${partnerName} to hug`}
@@ -334,7 +442,7 @@ const WorldPage: React.FC = () => {
               <div className="mb-3">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-sm font-semibold text-stone-800 dark:text-stone-100">
-                    {sel.id === 'tree' ? '🌳 Our love tree' : `${ITEM_BY_ID[sel.id]?.emoji} ${ITEM_BY_ID[sel.id]?.name}`}
+                    {ITEM_BY_ID[sel.id]?.emoji} {ITEM_BY_ID[sel.id]?.name}
                   </p>
                   <div className="flex gap-1.5">
                     <button onClick={() => turn(-Math.PI / 8)} className="w-9 h-9 rounded-full bg-white/80 dark:bg-white/10 flex items-center justify-center" aria-label="Turn left">

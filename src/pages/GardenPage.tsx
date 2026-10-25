@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Droplets, Sparkles, Star, Flower2, Trophy, Flame, Heart, DoorOpen } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useGameStore } from '../store/useGameStore';
-import { gardenLevel, sumBy, wateringStreak } from '../utils/scores';
+import { gardenLevel, loveCoins, sumBy, wateringStreak } from '../utils/scores';
 import { useCoupleStore } from '../store/useCoupleStore';
 import { usePresenceStore } from '../store/usePresenceStore';
 import { Avatar } from '../components/ui/Avatar';
@@ -33,6 +33,7 @@ const GardenPage: React.FC = () => {
   const award = useGameStore((s) => s.award);
   const builds = useGameStore((s) => s.builds);
   const justBuilt = useGameStore((s) => s.justBuilt);
+  const avatars = useGameStore((s) => s.avatars);
   const sendLove = useCoupleStore((s) => s.sendLove);
   const partnerOnline = usePresenceStore((s) => s.partnerPresence.online);
   const [watering, setWatering] = useState(false);
@@ -50,8 +51,8 @@ const GardenPage: React.FC = () => {
   const streak = me ? wateringStreak(points, me.id, partner.id) : 0;
   const hugs = points.filter((p) => p.source === 'hug' && p.user_id === me?.id).length;
   const flowerCount = Math.min(64, Math.floor(total / 15));
-  // Love coins: everything earned minus what has been built
-  const coins = Math.max(0, total - builds.reduce((t, b) => t + b.cost, 0));
+  // Love coins: everything earned minus builds and outfits bought
+  const coins = loveCoins(points, builds, avatars);
 
   useEffect(() => {
     const t = setInterval(() => setPhase(phaseFor(new Date().getHours())), 60_000);

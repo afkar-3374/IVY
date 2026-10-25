@@ -2,7 +2,7 @@ import { supabase } from './supabaseClient';
 import { logger } from './logger/logger';
 import { seal, open } from './crypto/coupleCrypto';
 
-export type PointSource = 'tap' | 'hug' | 'daily_question' | 'know_me' | 'would_you_rather' | 'tic_tac_toe' | 'garden';
+export type PointSource = 'tap' | 'hug' | 'daily_question' | 'know_me' | 'would_you_rather' | 'tic_tac_toe' | 'garden' | 'world';
 // 'know_me' is the database slot the daily doodle uses (the old quiz is gone)
 export type DailyGame = 'daily_question' | 'know_me' | 'would_you_rather';
 
@@ -36,6 +36,15 @@ export interface GardenBuild {
 }
 
 export type BuildLayout = Pick<GardenBuild, 'x' | 'z' | 'rot' | 'size'>;
+
+/** What someone wears in our world, the clothes they own and the love coins spent on them */
+export interface WorldAvatar {
+  user_id: string;
+  /** A wardrobe `Look`, kept loose here so older saves still load */
+  look: object;
+  owned: string[];
+  spent: number;
+}
 
 export interface TicTacToe {
   round: number;
@@ -192,7 +201,26 @@ class GameService {
     if (error) throw new Error(error.message);
   }
 
+  async getAvatars(): Promise<WorldAvatar[]> {
+    if (!supabase) return [];
+    const { data, error } = await supabase.from('world_avatars').select('user_id, look, owned, spent');
+    if (error) {
+      logger.error('Unable to load avatars:', error.message);
+      return [];
+    }
+    return data as WorldAvatar[];
+  }
+
+  async saveAvatar(row: WorldAvatar): Promise<void> {
+    if (!supabase) return;
+    const { error } = await supabase
+      .from('world_avatars')
+      .upsert({ ...row, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+    if (error) throw new Error(error.message);
+  }
+
   subscribe(handlers: {
+    onAvatar: (row: WorldAvatar) => void;
     onBuild: (row: GardenBuild) => void;
     onBuildMoved: (row: GardenBuild) => void;
     onPoint: (row: PointRow) => void;
@@ -206,6 +234,7 @@ class GameService {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'love_points' }, (p) => handlers.onPoint(p.new as PointRow))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_answers' }, () => handlers.onAnswer())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'garden_builds' }, (p) => handlers.onBuild(p.new as GardenBuild))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'world_avatars' }, (p) => p.new && 'user_id' in p.new && handlers.onAvatar(p.new as WorldAvatar))
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'garden_builds' }, (p) => handlers.onBuildMoved(p.new as GardenBuild))
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tic_tac_toe' }, (p) => handlers.onBoard(p.new as TicTacToe))
       .subscribe();

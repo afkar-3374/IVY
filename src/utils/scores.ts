@@ -1,4 +1,4 @@
-import type { PointRow, PointSource } from '../services/gameService';
+import type { GardenBuild, PointRow, PointSource, WorldAvatar } from '../services/gameService';
 import { todayKey } from '../data/gameQuestions';
 
 const DAY_MS = 86_400_000;
@@ -86,7 +86,14 @@ export const SOURCE_LABELS: Record<PointSource, string> = {
   would_you_rather: '🤔 Would you rather',
   tic_tac_toe: '❤️ Tic-tac-toe',
   garden: '🌱 Garden care',
+  world: '🌍 Our world',
 };
+
+/** Love coins: everything you've both earned minus builds and clothes bought */
+export function loveCoins(rows: PointRow[], builds: GardenBuild[], avatars: WorldAvatar[]): number {
+  const spent = builds.reduce((t, b) => t + b.cost, 0) + avatars.reduce((t, a) => t + (a.spent || 0), 0);
+  return Math.max(0, sumBy(rows) - spent);
+}
 
 /* ── Garden growth ── */
 export interface GardenLevel {

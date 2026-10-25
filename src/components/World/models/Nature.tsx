@@ -4,7 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
 import { Heart, Mat, WOOD_DARK } from './common';
 import { seeded, type Phase, type Season, type Weather } from '../../Garden/GardenScene';
-import { ISLAND_RADIUS, type Placement } from '../worldData';
+import { FIXED_SPOTS, ISLAND_RADIUS, ROAD_RADIUS, ROAD_WIDTH, type Placement } from '../worldData';
 
 const SKY: Record<Phase, { top: string; bottom: string; sun: string; sunI: number; amb: number; ground: string }> = {
   day: { top: '#6EC1F5', bottom: '#FFE4F1', sun: '#FFF4DC', sunI: 2.4, amb: 1.1, ground: '#C7F0D2' },
@@ -166,7 +166,10 @@ export const Flowers: React.FC<{ total: number; season: Season; placements: Plac
   const count = season === 'winter' ? Math.min(160, Math.floor(total / 12)) : Math.min(700, Math.floor(total / 6));
 
   const spots = useMemo(() => {
+    const fixed = Object.values(FIXED_SPOTS).map((f) => ({ x: f.x, z: f.z, r: 3.6 }));
     const blocked = (x: number, z: number) =>
+      Math.abs(Math.hypot(x, z) - ROAD_RADIUS) < ROAD_WIDTH / 2 + 0.5 ||
+      fixed.some((f) => Math.hypot(x - f.x, z - f.z) < f.r) ||
       placements.some((p) => Math.hypot(x - p.x, z - p.z) < (p.id === 'tree' ? 2 : p.id === 'pond' || p.id === 'cottage' ? 3.6 : 1.6) * p.size);
     const out: { x: number; z: number; s: number }[] = [];
     for (let i = 0; out.length < count && i < count * 3; i++) {

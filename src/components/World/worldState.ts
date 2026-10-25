@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Area, AvatarPose } from './worldData';
+import { VEHICLES } from './worldData';
 
 export interface SeatRef {
   key: string;
@@ -7,6 +8,12 @@ export interface SeatRef {
 }
 
 export type EmoteKind = 'hearts' | 'wave' | 'hug';
+
+export interface VehiclePos {
+  x: number;
+  z: number;
+  ry: number;
+}
 
 /** What each phone sends about its own avatar. */
 export interface RemotePose {
@@ -19,29 +26,10 @@ export interface RemotePose {
   moving: boolean;
   area: Area;
   seat: SeatRef | null;
-  look: Look;
   /** Balloon ride start (seconds) so the basket follows the rider */
   ride: number | null;
-}
-
-/** How your avatar looks (kept on this phone, sent to your partner live) */
-export interface Look {
-  outfit: string;
-  hair: string;
-  short: boolean;
-}
-
-export const OUTFITS = ['#F472B6', '#60A5FA', '#A78BFA', '#34D399', '#FBBF24', '#F87171', '#FFFFFF', '#374151'];
-export const HAIRS = ['#2B1B17', '#5B3A29', '#A0522D', '#E6BE8A', '#B91C1C', '#6D28D9'];
-
-const LOOK_KEY = 'ivy_world_look';
-function savedLook(fallback: Look): Look {
-  try {
-    const raw = localStorage.getItem(LOOK_KEY);
-    return raw ? { ...fallback, ...(JSON.parse(raw) as Partial<Look>) } : fallback;
-  } catch {
-    return fallback;
-  }
+  /** The vehicle they are driving and where it is */
+  drive?: { id: string } & VehiclePos;
 }
 
 interface WorldUI {
@@ -55,9 +43,9 @@ interface WorldUI {
   /** Build picked in edit mode */
   selected: string | null;
   partner: RemotePose | null;
-  look: Look;
+  /** "Today in our world" panel open */
+  questsOpen: boolean;
   setMode: (mode: WorldUI['mode']) => void;
-  setLook: (look: Partial<Look>) => void;
 }
 
 export const useWorldUI = create<WorldUI>((set) => ({
@@ -68,23 +56,12 @@ export const useWorldUI = create<WorldUI>((set) => ({
   canHug: false,
   selected: null,
   partner: null,
-  look: { outfit: '#F472B6', hair: '#2B1B17', short: false },
+  questsOpen: false,
   setMode: (mode) => set({ mode, selected: null }),
-  setLook: (patch) =>
-    set((s) => {
-      const look = { ...s.look, ...patch };
-      try {
-        localStorage.setItem(LOOK_KEY, JSON.stringify(look));
-      } catch {
-        /* storage unavailable */
-      }
-      return { look };
-    }),
 }));
 
-export function loadLook(fallback: Look) {
-  useWorldUI.setState({ look: savedLook(fallback) });
-}
+const parked = (): Record<string, VehiclePos> =>
+  Object.fromEntries(Object.entries(VEHICLES).map(([id, v]) => [id, { x: v.x, z: v.z, ry: v.rot }]));
 
 /**
  * Per-frame values the 3D loop reads and writes without re-rendering React.
@@ -108,8 +85,19 @@ export const live = {
   partnerShown: { x: 0, y: 0, z: 0, ry: 0, tilt: 0, pose: 'stand' as AvatarPose, moving: false },
   /** Height of the balloon basket above the ground */
   balloonAlt: 0,
+  /** Where the car and bike are (whoever drives moves them; both phones follow) */
+  vehicles: parked(),
+  /** Current speed of the vehicle you drive (for the wheels and the camera) */
+  vehicleSpeed: 0,
+  /** Dressing room: how far you've spun your avatar round */
+  dressSpin: 0,
   /** Set by the sync hook */
   send: (_event: 'pose' | 'emote' | 'leave', _payload: unknown) => {},
   /** Bumped when you teleport (enter/exit/climb) so the camera snaps instead of gliding */
   teleported: 0,
 };
+
+export function resetVehicles() {
+  live.vehicles = parked();
+  live.vehicleSpeed = 0;
+}

@@ -259,6 +259,9 @@ export const KittyTimer: React.FC<KittyTimerProps> = ({ onSecretTap }) => {
           </button>
           <div className="w-12 h-12" />
         </div>
+        <p className="text-[10px] text-stone-400 dark:text-stone-500 tabular-nums" title={__APP_BUILD__}>
+          v{__APP_VERSION__} · {__APP_BUILD__}
+        </p>
       </div>
     </div>
   );

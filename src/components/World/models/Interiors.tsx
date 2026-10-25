@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { Heart, Mat, WOOD, WOOD_DARK, WOOD_LIGHT, STONE } from './common';
-import { HOME_ORIGIN, HOME_SPOTS } from '../worldData';
+import { DRESS_ORIGIN, HOME_ORIGIN, HOME_SPOTS } from '../worldData';
 
 const Box: React.FC<{ s: [number, number, number]; p?: [number, number, number]; c: string; glow?: string | false; r?: [number, number, number] }> = ({ s, p, c, glow, r }) => (
   <mesh position={p} rotation={r} castShadow receiveShadow>
@@ -210,6 +210,94 @@ export const HomeInterior: React.FC<{ night: boolean }> = ({ night }) => {
         <sphereGeometry args={[0.18, 12, 8]} />
         <meshStandardMaterial color="#FEF3C7" emissive="#FDE68A" emissiveIntensity={2} />
       </mesh>
+    </group>
+  );
+};
+
+/** The dressing room: two podiums under spotlights, a big mirror and racks of clothes. */
+export const DressingRoom: React.FC = () => {
+  const racks = ['#F472B6', '#60A5FA', '#FBBF24', '#A78BFA', '#34D399', '#FB7185', '#FFFFFF', '#1E3A8A'];
+  return (
+    <group position={DRESS_ORIGIN}>
+      <mesh position={[0, 1.8, 0]}>
+        <boxGeometry args={[9, 3.6, 7]} />
+        <meshStandardMaterial color="#FDF2F8" side={THREE.BackSide} roughness={0.9} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow>
+        <planeGeometry args={[9, 7]} />
+        <Mat c="#FBCFE8" />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0.3]}>
+        <circleGeometry args={[2.4, 40]} />
+        <Mat c="#FFFFFF" />
+      </mesh>
+      {/* podiums, one each */}
+      {[-0.9, 0.9].map((x) => (
+        <group key={x} position={[x, 0, 0]}>
+          <mesh position={[0, 0.1, 0]} receiveShadow castShadow>
+            <cylinderGeometry args={[0.65, 0.7, 0.2, 28]} />
+            <meshStandardMaterial color="#FFFFFF" roughness={0.3} />
+          </mesh>
+          <mesh position={[0, 0.205, 0]}>
+            <torusGeometry args={[0.66, 0.025, 6, 32]} />
+            <meshStandardMaterial color="#F472B6" emissive="#F472B6" emissiveIntensity={0.8} />
+          </mesh>
+          <spotLight position={[0, 3.4, 1.2]} angle={0.45} penumbra={0.7} intensity={18} distance={7} color="#FFF1F2" />
+        </group>
+      ))}
+      {/* the big mirror */}
+      <group position={[0, 1.7, -3.45]}>
+        <Box s={[3.4, 2.6, 0.1]} c="#FDE68A" />
+        <mesh position={[0, 0, 0.06]}>
+          <planeGeometry args={[3.1, 2.3]} />
+          <meshStandardMaterial color="#DBEAFE" emissive="#BFDBFE" emissiveIntensity={0.35} roughness={0.15} />
+        </mesh>
+        {Array.from({ length: 14 }, (_, i) => {
+          const a = (i / 14) * Math.PI * 2;
+          return (
+            <mesh key={i} position={[Math.cos(a) * 1.75, Math.sin(a) * 1.35, 0.08]}>
+              <sphereGeometry args={[0.06, 8, 6]} />
+              <meshStandardMaterial color="#FEF9C3" emissive="#FDE047" emissiveIntensity={1.6} />
+            </mesh>
+          );
+        })}
+      </group>
+      {/* clothes racks on both sides */}
+      {[-3.6, 3.6].map((x, side) => (
+        <group key={x} position={[x, 0, -0.5]} rotation={[0, side ? -Math.PI / 2 : Math.PI / 2, 0]}>
+          <Box s={[3, 0.05, 0.05]} p={[0, 1.8, 0]} c="#D6D3D1" />
+          {[-1.45, 1.45].map((px) => (
+            <Box key={px} s={[0.05, 1.8, 0.05]} p={[px, 0.9, 0]} c="#D6D3D1" />
+          ))}
+          {racks.map((c, i) => (
+            <group key={i} position={[-1.2 + i * 0.34, 1.35, 0]}>
+              <mesh castShadow>
+                <cylinderGeometry args={[0.1, 0.2, 0.75, 10]} />
+                <Mat c={side ? racks[(i + 3) % racks.length] : c} />
+              </mesh>
+            </group>
+          ))}
+        </group>
+      ))}
+      {/* shoe shelf and a plant */}
+      <group position={[3.2, 0, 2.6]}>
+        <Box s={[1.4, 0.9, 0.5]} p={[0, 0.45, 0]} c={WOOD_LIGHT} />
+        {[0.25, 0.65].map((y) => [-0.45, 0, 0.45].map((x) => <Box key={`${x}${y}`} s={[0.25, 0.12, 0.3]} p={[x, y, 0.05]} c={['#F472B6', '#FFFFFF', '#1F2937'][Math.round(x * 2 + 1)]} />))}
+      </group>
+      <group position={[-3.6, 0, 2.6]}>
+        <mesh position={[0, 0.3, 0]}>
+          <cylinderGeometry args={[0.3, 0.24, 0.6, 12]} />
+          <Mat c="#FDBA74" />
+        </mesh>
+        {[0, 1, 2, 3].map((i) => (
+          <mesh key={i} position={[Math.cos(i * 1.6) * 0.18, 0.85 + i * 0.15, Math.sin(i * 1.6) * 0.18]}>
+            <icosahedronGeometry args={[0.3, 0]} />
+            <Mat c="#22C55E" />
+          </mesh>
+        ))}
+      </group>
+      <Heart c="#F43F5E" position={[0, 3.3, -3.4]} scale={0.35} glow />
+      <pointLight position={[0, 3.2, 1]} color="#FFE4E6" intensity={8} distance={12} />
     </group>
   );
 };
