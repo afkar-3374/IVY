@@ -5,9 +5,28 @@ import { VEHICLES } from './worldData';
 export interface SeatRef {
   key: string;
   idx: number;
+  /** Which Ferris wheel cabin */
+  cabin?: number;
 }
 
-export type EmoteKind = 'hearts' | 'wave' | 'hug';
+export type EmoteKind = 'hearts' | 'wave' | 'hug' | 'dance' | 'kiss' | 'emoji';
+export interface Emote {
+  kind: EmoteKind;
+  until: number;
+  /** The emoji shown in a bubble for kind 'emoji' */
+  emoji?: string;
+}
+
+export interface RaceState {
+  phase: 'countdown' | 'go' | 'done';
+  /** When the race starts (after the countdown), seconds */
+  start: number;
+  /** Next gate to pass (RACE_GATES = through the finish) */
+  gate: number;
+  /** Your time once finished */
+  time: number | null;
+  boat: string;
+}
 
 export interface VehiclePos {
   x: number;
@@ -30,6 +49,8 @@ export interface RemotePose {
   ride: number | null;
   /** The vehicle they are driving and where it is */
   drive?: { id: string } & VehiclePos;
+  /** Their boat race, if they're in one */
+  race?: { start: number; gate: number; time: number | null };
 }
 
 interface WorldUI {
@@ -45,8 +66,25 @@ interface WorldUI {
   partner: RemotePose | null;
   /** "Today in our world" panel open */
   questsOpen: boolean;
+  /** Waiting on the Ferris wheel platform for the next cabin */
+  ferrisWaiting: boolean;
+  /** Asked to get off the Ferris wheel; happens at the bottom */
+  ferrisLeaving: boolean;
+  race: RaceState | null;
+  /** Battery saver: 30 fps, no shadows, lower resolution */
+  saver: boolean;
   setMode: (mode: WorldUI['mode']) => void;
+  setSaver: (on: boolean) => void;
 }
+
+const SAVER_KEY = 'ivy_world_saver';
+const savedSaver = () => {
+  try {
+    return localStorage.getItem(SAVER_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
 
 export const useWorldUI = create<WorldUI>((set) => ({
   mode: 'play',
@@ -57,7 +95,19 @@ export const useWorldUI = create<WorldUI>((set) => ({
   selected: null,
   partner: null,
   questsOpen: false,
+  ferrisWaiting: false,
+  ferrisLeaving: false,
+  race: null,
+  saver: savedSaver(),
   setMode: (mode) => set({ mode, selected: null }),
+  setSaver: (saver) => {
+    try {
+      localStorage.setItem(SAVER_KEY, saver ? '1' : '0');
+    } catch {
+      /* storage unavailable */
+    }
+    set({ saver });
+  },
 }));
 
 const parked = (): Record<string, VehiclePos> =>
@@ -77,8 +127,13 @@ export const live = {
   /** Tap-to-walk destination, and what to use on arrival */
   target: null as null | { x: number; z: number; use?: string },
   ride: null as null | { start: number; landAt: number | null },
-  myEmote: null as null | { kind: EmoteKind; until: number },
-  partnerEmote: null as null | { kind: EmoteKind; until: number },
+  myEmote: null as null | Emote,
+  partnerEmote: null as null | Emote,
+  /** Your walking velocity (smoothed, so starting and stopping feel soft) */
+  vel: { x: 0, z: 0 },
+  /** Ferris wheel: the cabin you're waiting for and when it arrives, and when you boarded */
+  ferrisWait: null as null | { cabin: number; at: number },
+  ferrisBoarded: 0,
   partnerSeenAt: 0,
   /** Latest pose from the partner's phone, and where we are drawing them (smoothed) */
   partner: null as RemotePose | null,

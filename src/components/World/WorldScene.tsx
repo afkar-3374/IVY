@@ -5,17 +5,19 @@ import { OrbitControls } from '@react-three/drei';
 import { Avatar } from './models/Avatar';
 import { BUILD_MODELS } from './models/Builds';
 import { DressingRoom, HomeInterior } from './models/Interiors';
-import { BorderTrees, Clouds, Flowers, Island, LoveTree, SkyAndLight } from './models/Nature';
-import { Bike, Boutique, Car, Ferris, Parking, Road, Station, Train } from './models/Rides';
+import { BorderTrees, Clouds, Flowers, Island, LoveTree, Rocks, SkyAndLight } from './models/Nature';
+import { Bike, Boutique, Car, Dock, Ferris, Horse, Lighthouse, Paddock, Parking, RaceGates, Railway, Road, SpeedBoat, Station, Train } from './models/Rides';
 import {
   DRESS_ORIGIN,
+  FERRIS_SPEED,
   FIXED_SPOTS,
-  ISLAND_RADIUS,
   SWING_PIVOT,
   VEHICLES,
   activityKey,
   balloonAltitude,
   collide,
+  collideWater,
+  ferrisAtPlatform,
   interactables,
   now,
   reachGap,
@@ -27,7 +29,8 @@ import {
   type Placement,
 } from './worldData';
 import { live, useWorldUI } from './worldState';
-import { activate, groundY, standUp, type ActionHelpers } from './worldActions';
+import { activate, getInCabin, groundY, standUp, type ActionHelpers } from './worldActions';
+import { GATES, GATE_HALF_WIDTH, RACE_GATES, angleOf, coastR, polar } from './terrain';
 import type { Look } from './wardrobe';
 import type { Phase, Season, Weather } from '../Garden/GardenScene';
 
@@ -183,18 +186,46 @@ const Controller: React.FC<{ placements: Placement[]; helpers: ActionHelpers; ce
           if (vehicle && ui.seat.idx === 0) {
             // You're driving: steer toward the stick, speed up and slow down smoothly
             const v = live.vehicles[seatIt.key];
+            const race = ui.race;
+            const held = race && race.boat === seatIt.key && t < race.start; // 3-2-1…
             const [dx, dz] = toWorldDir(ix, iy);
-            const mag = Math.min(1, inputMag);
+            const mag = held ? 0 : Math.min(1, inputMag);
             const want = vehicle.speed * mag;
-            live.vehicleSpeed += (want - live.vehicleSpeed) * Math.min(1, dt * (want > live.vehicleSpeed ? 1.6 : 3));
+            live.vehicleSpeed += (want - live.vehicleSpeed) * Math.min(1, dt * (want > live.vehicleSpeed ? 1.4 : vehicle.water ? 1.2 : 3));
             if (mag > 0.1) {
               let d = Math.atan2(dx, dz) - v.ry;
               d = Math.atan2(Math.sin(d), Math.cos(d));
-              const turn = (seatIt.key === 'car' ? 2.0 : 2.8) * dt * Math.min(1, 0.3 + live.vehicleSpeed / 3);
+              const turn = vehicle.turn * dt * Math.min(1, 0.3 + live.vehicleSpeed / 3);
               v.ry += Math.max(-turn, Math.min(turn, d));
             }
             const step = live.vehicleSpeed * dt;
-            [v.x, v.z] = collide('out', v.x + Math.sin(v.ry) * step, v.z + Math.cos(v.ry) * step, all, undefined, seatIt.radius, seatIt.key);
+            const nx = v.x + Math.sin(v.ry) * step;
+            const nz = v.z + Math.cos(v.ry) * step;
+            if (vehicle.water) {
+              const others = Object.entries(live.vehicles)
+                .filter(([id]) => id !== seatIt!.key && VEHICLES[id]?.water)
+                .map(([, o]) => ({ x: o.x, z: o.z, r: 1.2 }));
+              [v.x, v.z] = collideWater(nx, nz, seatIt.radius, others);
+            } else {
+              [v.x, v.z] = collide('out', nx, nz, all, undefined, seatIt.radius, seatIt.key);
+            }
+            // Boat race: through the gates in order, back through the first to finish
+            if (race && race.boat === seatIt.key) {
+              if (race.phase === 'countdown' && t >= race.start) useWorldUI.setState({ race: { ...race, phase: 'go' } });
+              if (race.phase !== 'done' && t >= race.start) {
+                const g = GATES[race.gate % RACE_GATES];
+                if (Math.hypot(v.x - g.x, v.z - g.z) < GATE_HALF_WIDTH + 1.2) {
+                  const gate = race.gate + 1;
+                  navigator.vibrate?.(30);
+                  if (gate > RACE_GATES) {
+                    useWorldUI.setState({ race: { ...race, gate, phase: 'done', time: t - race.start } });
+                    helpers.reward('race');
+                  } else {
+                    useWorldUI.setState({ race: { ...race, gate } });
+                  }
+                }
+              }
+            }
             // the camera settles in behind you
             if (live.vehicleSpeed > 0.5) {
               let dy = v.ry + Math.PI - live.yaw;
@@ -205,8 +236,13 @@ const Controller: React.FC<{ placements: Placement[]; helpers: ActionHelpers; ce
           } else if (!seatIt.vehicle && inputMag > 0.5 && !['ride', 'train', 'ferris'].includes(seatIt.action ?? '')) {
             standUp(all, placements);
           }
+          if (seatIt?.action === 'ferris') {
+            const cabin = ui.seat.cabin ?? 0;
+            const fullTurn = t - live.ferrisBoarded > (Math.PI * 2) / FERRIS_SPEED - 2;
+            if ((ui.ferrisLeaving || fullTurn) && ferrisAtPlatform(t, cabin) && t - live.ferrisBoarded > 3) standUp(all, placements);
+          }
           if (seatIt && useWorldUI.getState().seat) {
-            const p = seatPose(seatIt, ui.seat.idx, t, live.balloonAlt);
+            const p = seatPose(seatIt, ui.seat.idx, t, live.balloonAlt, ui.seat.cabin ?? 0);
             Object.assign(me, p, { moving: false });
           }
         }
@@ -232,23 +268,34 @@ const Controller: React.FC<{ placements: Placement[]; helpers: ActionHelpers; ce
           }
         }
 
-        const mag = Math.min(1, Math.hypot(ix, iy));
-        if (mag > 0.05) {
-          const [dx, dz] = toWorldDir(ix, iy);
-          const len = Math.hypot(dx, dz) || 1;
-          const step = SPEED * mag * dt;
+        // Smooth walking: ease into the stick's direction and speed (jogging when pushed all the way)
+        const raw = Math.min(1, Math.hypot(ix, iy));
+        const mag = raw < 0.08 ? 0 : raw;
+        const [dx, dz] = mag ? toWorldDir(ix, iy) : [0, 0];
+        const len = Math.hypot(dx, dz) || 1;
+        const speed = mag > 0.92 ? SPEED * 1.35 : SPEED * Math.pow(mag, 1.3);
+        const v = live.vel;
+        const ease = 1 - Math.exp(-dt * (mag ? 9 : 12));
+        v.x += ((dx / len) * speed - v.x) * ease;
+        v.z += ((dz / len) * speed - v.z) * ease;
+        const sp = Math.hypot(v.x, v.z);
+        if (sp > 0.15) {
           const th = placements.find((p) => p.id === 'treehouse');
-          [me.x, me.z] = collide(ui.area, me.x + (dx / len) * step, me.z + (dz / len) * step, all, th);
-          me.ry = Math.atan2(dx, dz);
+          [me.x, me.z] = collide(ui.area, me.x + v.x * dt, me.z + v.z * dt, all, th);
+          me.ry = Math.atan2(v.x, v.z);
           me.moving = true;
           // a walk cancels emotes
-          if (live.myEmote && live.myEmote.kind !== 'hearts') live.myEmote = null;
+          if (live.myEmote && live.myEmote.kind !== 'hearts' && live.myEmote.kind !== 'emoji') live.myEmote = null;
         } else {
+          v.x = v.z = 0;
           me.moving = false;
         }
         me.y = groundY(ui.area, placements);
         me.tilt = 0;
-        me.pose = live.myEmote && live.myEmote.until > t && live.myEmote.kind === 'hug' ? 'hug' : 'stand';
+        const em = live.myEmote && live.myEmote.until > t ? live.myEmote.kind : null;
+        me.pose = em === 'hug' ? 'hug' : em === 'kiss' ? 'kiss' : em === 'dance' ? 'dance' : 'stand';
+        // Ferris wheel: your cabin has come down to the platform
+        if (live.ferrisWait && t >= live.ferrisWait.at) getInCabin(live.ferrisWait.cabin, helpers);
       }
 
       // What can you use right now? (and points for doing it together)
@@ -294,7 +341,7 @@ const Controller: React.FC<{ placements: Placement[]; helpers: ActionHelpers; ce
             : look.current.set(me.x, me.y + (ui.seat ? 0.75 : 1.3), me.z);
         const action = seatIt?.action;
         const dist =
-          (action === 'ride' ? 13 : action === 'ferris' ? 14 : action === 'train' ? 10 : action === 'drive' || action === 'cycle' ? 9 : indoor ? 6.5 : 7.5) *
+          (action === 'ride' ? 13 : action === 'ferris' ? 14 : action === 'train' ? 10 : action === 'sail' ? 11 : action === 'drive' || action === 'cycle' || action === 'gallop' ? 9 : indoor ? 6.5 : 7.5) *
           live.zoom;
         const pitch = indoor ? Math.max(0.75, live.pitch) : action === 'ride' || action === 'ferris' ? Math.max(0.25, live.pitch) : live.pitch;
         camPos.current.set(
@@ -322,7 +369,7 @@ const Controller: React.FC<{ placements: Placement[]; helpers: ActionHelpers; ce
       // Seated partners are placed exactly (swing/boat/balloon/train move on the shared clock)
       const it = p.seat ? usable(p.area, interactables(p.area, placements)).find((i) => i.key === p.seat!.key) : undefined;
       if (it && p.seat) {
-        Object.assign(s, seatPose(it, p.seat.idx, t, live.balloonAlt), { moving: false });
+        Object.assign(s, seatPose(it, p.seat.idx, t, live.balloonAlt, p.seat.cabin ?? 0), { moving: false });
       } else {
         s.x += (p.x - s.x) * a;
         s.y += (p.y - s.y) * a;
@@ -344,6 +391,7 @@ const Controller: React.FC<{ placements: Placement[]; helpers: ActionHelpers; ce
         x: me.x, y: me.y, z: me.z, ry: me.ry, tilt: me.tilt, pose: me.pose, moving: me.moving,
         area: ui.area, seat: ui.seat, ride: live.ride?.start ?? null,
         drive: driving ? { id: driving, ...live.vehicles[driving] } : undefined,
+        race: ui.race ? { start: ui.race.start, gate: ui.race.gate, time: ui.race.time } : undefined,
       });
     }
   });
@@ -410,6 +458,40 @@ const PlacedBuild: React.FC<{ p: Placement; night: boolean; busy: boolean; selec
   );
 };
 
+/**
+ * Keeps phones cool: draws at a capped frame rate (on demand) and only re-renders
+ * shadows a few times a second.
+ */
+const FrameDriver: React.FC<{ fps: number; shadows: boolean }> = ({ fps, shadows }) => {
+  const { invalidate, gl } = useThree();
+  useEffect(() => {
+    let raf = 0;
+    let last = 0;
+    const loop = (ts: number) => {
+      raf = requestAnimationFrame(loop);
+      if (ts - last >= 1000 / fps - 2) {
+        last = ts;
+        invalidate();
+      }
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [fps, invalidate]);
+  const since = useRef(0);
+  useEffect(() => {
+    gl.shadowMap.autoUpdate = false;
+    gl.shadowMap.needsUpdate = true;
+  }, [gl]);
+  useFrame((_, dt) => {
+    since.current += dt;
+    if (shadows && since.current > 0.15) {
+      since.current = 0;
+      gl.shadowMap.needsUpdate = true;
+    }
+  });
+  return null;
+};
+
 /** Something that's always in the world, at its fixed spot. */
 const Fixed: React.FC<{ id: keyof typeof FIXED_SPOTS; onUse: (id: string, e: ThreeEvent<MouseEvent>) => void; children: React.ReactNode }> = ({ id, onUse, children }) => {
   const d = FIXED_SPOTS[id];
@@ -428,7 +510,12 @@ export const WorldScene: React.FC<WorldSceneProps> = ({ placements, total, level
   const seat = useWorldUI((s) => s.seat);
   const selected = useWorldUI((s) => s.selected);
   const partnerPose = useWorldUI((s) => s.partner);
+  const saver = useWorldUI((s) => s.saver);
+  const race = useWorldUI((s) => s.race);
   const editing = mode === 'edit';
+  // phones run cooler at a capped frame rate
+  const coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+  const fps = saver ? 30 : coarse ? 45 : 60;
   const stargazing = seat?.key === 'telescope';
   const shownPhase: Phase = stargazing ? 'night' : phase;
   const night = shownPhase === 'night';
@@ -471,9 +558,9 @@ export const WorldScene: React.FC<WorldSceneProps> = ({ placements, total, level
     if (!editing || !editDrag.active) return;
     let x = e.point.x + editDrag.dx;
     let z = e.point.z + editDrag.dz;
-    const d = Math.hypot(x, z);
-    const max = ISLAND_RADIUS - 2;
-    if (d > max) [x, z] = [(x / d) * max, (z / d) * max];
+    const a = angleOf(x, z);
+    const max = coastR(a) - 2.5;
+    if (Math.hypot(x, z) > max) [x, z] = polar(max, a);
     onMove(editDrag.id, x, z, false);
   };
 
@@ -491,12 +578,15 @@ export const WorldScene: React.FC<WorldSceneProps> = ({ placements, total, level
 
   return (
     <Canvas
-      shadows
-      dpr={[1, 1.75]}
+      key={saver ? 'saver' : 'full'}
+      shadows={!saver}
+      frameloop="demand"
+      dpr={saver ? 1 : [1, 1.5]}
       camera={{ fov: 55, near: 0.1, far: 700, position: [6, 6, 14] }}
-      gl={{ antialias: true, powerPreference: 'high-performance' }}
+      gl={{ antialias: !saver && (typeof window === 'undefined' || window.devicePixelRatio < 2), powerPreference: saver ? 'low-power' : 'high-performance' }}
       onPointerMissed={() => editing && !editDrag.active && useWorldUI.setState({ selected: null })}
     >
+      <FrameDriver fps={fps} shadows={!saver} />
       <SkyAndLight phase={shownPhase} weather={weather} center={center} />
       <Clouds weather={weather} phase={shownPhase} center={center} />
       <Island season={season} onGround={walkTo} onGroundMove={dragOver} />
@@ -508,7 +598,11 @@ export const WorldScene: React.FC<WorldSceneProps> = ({ placements, total, level
         </mesh>
       )}
       <Road />
-      <BorderTrees season={season} />
+      <Railway />
+      <Rocks />
+      <Dock />
+      <RaceGates next={race && race.phase !== 'done' ? race.gate % RACE_GATES : null} />
+      <BorderTrees season={season} placements={placements} />
       <Flowers total={total} season={season} placements={placements} />
       <group onClick={(e) => use('tree', e)}>
         <LoveTree level={level} season={season} place={tree} />
@@ -531,9 +625,18 @@ export const WorldScene: React.FC<WorldSceneProps> = ({ placements, total, level
       <Fixed id="parking" onUse={use}>
         <Parking />
       </Fixed>
+      <Fixed id="paddock" onUse={use}>
+        <Paddock />
+      </Fixed>
+      <Fixed id="lighthouse" onUse={use}>
+        <Lighthouse night={night} />
+      </Fixed>
       <Train night={night} />
       <Car night={night} onClick={(e) => use('car', e)} />
       <Bike onClick={(e) => use('bike', e)} />
+      <Horse onClick={(e) => use('horse', e)} />
+      <SpeedBoat id="boatA" color="#F472B6" onClick={(e) => use('boatA', e)} />
+      <SpeedBoat id="boatB" color="#60A5FA" onClick={(e) => use('boatB', e)} />
 
       {showHome && <HomeInterior night={night} />}
       {showDressing && <DressingRoom />}

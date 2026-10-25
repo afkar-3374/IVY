@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { HEART, Mat } from './common';
 import type { WorldPose } from '../worldData';
-import type { EmoteKind } from '../worldState';
+import type { Emote } from '../worldState';
 import type { Look } from '../wardrobe';
 
 const HIP = 0.72;
@@ -15,13 +15,40 @@ export interface AvatarFrame extends WorldPose {
 interface AvatarProps {
   /** Read every frame, so moving never re-renders React */
   frame: () => AvatarFrame;
-  emote: () => { kind: EmoteKind; until: number } | null;
+  emote: () => Emote | null;
   look: Look;
   name: string;
   visible?: boolean;
 }
 
 const approach = (from: number, to: number, k: number) => from + (to - from) * k;
+
+/** Emoji pictures for the speech bubble, drawn once each. */
+const emojiTextures = new Map<string, THREE.CanvasTexture>();
+function emojiTexture(emoji: string): THREE.CanvasTexture {
+  let t = emojiTextures.get(emoji);
+  if (!t) {
+    const c = document.createElement('canvas');
+    c.width = 128;
+    c.height = 128;
+    const g = c.getContext('2d')!;
+    g.fillStyle = 'rgba(255,255,255,0.92)';
+    g.beginPath();
+    g.arc(64, 58, 52, 0, Math.PI * 2);
+    g.moveTo(52, 104);
+    g.lineTo(64, 124);
+    g.lineTo(76, 104);
+    g.fill();
+    g.font = '64px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(emoji, 64, 62);
+    t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    emojiTextures.set(emoji, t);
+  }
+  return t;
+}
 const shade = (c: string, k: number) => `#${new THREE.Color(c).multiplyScalar(k).getHexString()}`;
 
 /** A little white name pill that always faces the camera. */
@@ -281,6 +308,8 @@ export const Avatar: React.FC<AvatarProps> = ({ frame, emote, look, name, visibl
   const head = useRef<THREE.Group>(null);
   const hearts = useRef<THREE.Group>(null);
   const wings = useRef<THREE.Group>(null);
+  const bubble = useRef<THREE.Sprite>(null);
+  const bubbleEmoji = useRef<string | null>(null);
   const walk = useRef(0);
   const pedal = useRef(0);
 
@@ -299,7 +328,7 @@ export const Avatar: React.FC<AvatarProps> = ({ frame, emote, look, name, visibl
     const e = emote();
     const emoting = e && e.until > now ? e.kind : null;
     const pose = f.moving ? 'walk' : f.pose;
-    const seated = pose === 'sit' || pose === 'sitLow' || pose === 'lie' || pose === 'swing' || pose === 'pedal';
+    const seated = pose === 'sit' || pose === 'sitLow' || pose === 'lie' || pose === 'swing' || pose === 'pedal' || pose === 'straddle';
 
     if (f.moving) walk.current += delta * 9;
     const swing = f.moving ? Math.sin(walk.current) * 0.7 : 0;
@@ -314,6 +343,9 @@ export const Avatar: React.FC<AvatarProps> = ({ frame, emote, look, name, visibl
     let armRZ = -0.08;
     let pivotX = f.tilt;
     let bodyY = 0;
+    let legLZ = 0;
+    let legRZ = 0;
+    let twist = 0;
     if (pose === 'sit' || pose === 'swing') {
       legLX = legRX = -Math.PI / 2;
       kneeLX = kneeRX = Math.PI / 2 + Math.sin(now * 2) * 0.06;
@@ -338,6 +370,16 @@ export const Avatar: React.FC<AvatarProps> = ({ frame, emote, look, name, visibl
       armRZ = 0.12;
       pivotX = 0.15;
       bodyY = -HIP;
+    } else if (pose === 'straddle') {
+      // on horseback: legs either side, hands on the reins, bouncing with the gallop
+      legLX = legRX = -0.35;
+      legLZ = -0.5;
+      legRZ = 0.5;
+      kneeLX = kneeRX = 0.75;
+      armLX = armRX = -0.95;
+      armLZ = 0.15;
+      armRZ = -0.15;
+      bodyY = -HIP + Math.abs(Math.sin(now * 9)) * 0.04;
     } else if (pose === 'sitLow') {
       legLX = legRX = -Math.PI / 2 + 0.1;
       kneeLX = kneeRX = 0.15;
@@ -361,10 +403,27 @@ export const Avatar: React.FC<AvatarProps> = ({ frame, emote, look, name, visibl
       armLX = armRX = -1.35;
       armLZ = -0.35;
       armRZ = 0.35;
+    } else if (emoting === 'kiss' && !seated) {
+      armLX = armRX = -1.1;
+      armLZ = -0.3;
+      armRZ = 0.3;
+      pivotX = 0.18;
+    } else if (emoting === 'dance' && !seated && !f.moving) {
+      const b = now * 7;
+      armLZ = -2.3 + Math.sin(b) * 0.5;
+      armRZ = 2.3 + Math.sin(b + Math.PI) * 0.5;
+      armLX = armRX = 0;
+      legLX = Math.sin(b) * 0.35;
+      legRX = -Math.sin(b) * 0.35;
+      twist = Math.sin(b * 0.5) * 0.5;
+      bodyY = Math.abs(Math.sin(b)) * 0.08;
     }
 
     legL.current!.rotation.x = approach(legL.current!.rotation.x, legLX, k);
     legR.current!.rotation.x = approach(legR.current!.rotation.x, legRX, k);
+    legL.current!.rotation.z = approach(legL.current!.rotation.z, legLZ, k);
+    legR.current!.rotation.z = approach(legR.current!.rotation.z, legRZ, k);
+    body.current!.rotation.y = approach(body.current!.rotation.y, twist, k);
     kneeL.current!.rotation.x = approach(kneeL.current!.rotation.x, kneeLX, k);
     kneeR.current!.rotation.x = approach(kneeR.current!.rotation.x, kneeRX, k);
     armL.current!.rotation.x = approach(armL.current!.rotation.x, armLX, k);
@@ -377,8 +436,24 @@ export const Avatar: React.FC<AvatarProps> = ({ frame, emote, look, name, visibl
     head.current!.rotation.y = emoting === 'hearts' ? Math.sin(now * 3) * 0.25 : 0;
     if (wings.current) wings.current.children.forEach((w, i) => (w.rotation.y = (i ? -1 : 1) * (0.5 + Math.sin(now * 3) * 0.25)));
 
+    // emoji speech bubble
+    const bub = bubble.current!;
+    const showEmoji = emoting === 'emoji' && e?.emoji ? e.emoji : emoting === 'kiss' ? '💋' : null;
+    bub.visible = Boolean(showEmoji);
+    if (showEmoji) {
+      if (bubbleEmoji.current !== showEmoji) {
+        bubbleEmoji.current = showEmoji;
+        (bub.material as THREE.SpriteMaterial).map = emojiTexture(showEmoji);
+        (bub.material as THREE.SpriteMaterial).needsUpdate = true;
+      }
+      const left = (e?.until ?? now) - now;
+      const pop = Math.min(1, (3 - left) * 6, left * 3);
+      bub.scale.setScalar(0.7 * Math.max(0, pop));
+      bub.position.y = 2.55 + Math.sin(now * 3) * 0.04;
+    }
+
     const h = hearts.current!;
-    h.visible = emoting === 'hearts' || emoting === 'hug';
+    h.visible = emoting === 'hearts' || emoting === 'hug' || emoting === 'kiss';
     if (h.visible) {
       h.children.forEach((c, i) => {
         const p = (now * 0.6 + i / h.children.length) % 1;
@@ -527,6 +602,9 @@ export const Avatar: React.FC<AvatarProps> = ({ frame, emote, look, name, visibl
         ))}
       </group>
       <NameTag name={name} />
+      <sprite ref={bubble} visible={false} position={[0, 2.55, 0]}>
+        <spriteMaterial transparent depthWrite={false} />
+      </sprite>
     </group>
   );
 };

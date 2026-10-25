@@ -5,7 +5,10 @@ import {
   HOME_ORIGIN,
   SEAT_ACTIONS,
   TREEHOUSE_HEIGHT,
+  VEHICLES,
   activityKey,
+  ferrisAtPlatform,
+  ferrisNext,
   reachGap,
   rideExit,
   seatCount,
@@ -16,6 +19,7 @@ import {
   type Placement,
 } from './worldData';
 import { live, useWorldUI, type EmoteKind, type RemotePose } from './worldState';
+import { raceStart } from './terrain';
 
 export interface ActionHelpers {
   placements: Placement[];
@@ -48,10 +52,10 @@ function teleport(area: Area, x: number, y: number, z: number, ry: number, camer
   useWorldUI.setState({ area, seat: null, nearby: null });
 }
 
-export function emote(kind: EmoteKind) {
-  live.myEmote = { kind, until: now() + 3 };
-  live.send('emote', { kind });
-  navigator.vibrate?.(kind === 'hug' ? [60, 40, 120] : 30);
+export function emote(kind: EmoteKind, emoji?: string) {
+  live.myEmote = { kind, until: now() + (kind === 'dance' ? 6 : 3), emoji };
+  live.send('emote', { kind, emoji });
+  navigator.vibrate?.(kind === 'hug' || kind === 'kiss' ? [60, 40, 120] : 30);
 }
 
 /** Step off whatever you're sitting on (or out of whatever you're driving). */
@@ -64,9 +68,20 @@ export function standUp(list: Interactable[], placements: Placement[]) {
     live.ride.landAt = now();
     return;
   }
+  if (it?.action === 'ferris' && !ferrisAtPlatform(now(), seat.cabin ?? 0)) {
+    // you get off when your cabin comes down to the platform
+    useWorldUI.setState({ ferrisLeaving: true });
+    return;
+  }
   live.ride = null;
   live.vehicleSpeed = 0;
-  if (it) {
+  useWorldUI.setState({ ferrisLeaving: false, race: null });
+  if (it && it.vehicle && VEHICLES[it.key]?.water) {
+    // boats drop you back on the jetty
+    const d = FIXED_SPOTS.dock;
+    Object.assign(live.me, { x: d.x, z: d.z, y: 0, tilt: 0, pose: 'stand' });
+    live.teleported += 1;
+  } else if (it) {
     const off = rideExit(it, now());
     if (off) {
       Object.assign(live.me, { x: off[0], z: off[1], y: 0, tilt: 0, pose: 'stand' });
@@ -108,6 +123,9 @@ export function activate(it: Interactable, h: ActionHelpers) {
   if (!kind) return;
   const points = activityKey(it.key);
 
+  if (kind === 'ferris') return boardFerris(it, h);
+  if (kind === 'race') return startRace(h);
+
   if (SEAT_ACTIONS.includes(kind)) {
     const partner = ui.partner;
     const taken = partner?.seat?.key === it.key ? partner.seat.idx : -1;
@@ -122,8 +140,9 @@ export function activate(it: Interactable, h: ActionHelpers) {
       h.toast('Your wish is in the fountain ✨');
     }
     if (kind === 'stargaze') h.toast('Look up — every star is a hug 🌟');
-    if ((kind === 'drive' || kind === 'cycle') && idx === 1) h.toast(`${h.partnerName} is steering — enjoy the ride 💞`);
-    if ((kind === 'drive' || kind === 'cycle') && idx === 0) h.toast('Use the stick to steer 🛞');
+    const steered = kind === 'drive' || kind === 'cycle' || kind === 'gallop' || kind === 'sail';
+    if (steered && idx === 1) h.toast(`${h.partnerName} is steering — enjoy the ride 💞`);
+    if (steered && idx === 0) h.toast('Use the stick to steer 🛞');
     return;
   }
 
@@ -163,6 +182,58 @@ export function activate(it: Interactable, h: ActionHelpers) {
   }
 }
 
+/** Ferris wheel: get into the cabin at the platform (or wait for the next one). */
+function boardFerris(it: Interactable, h: ActionHelpers) {
+  const t = now();
+  const partner = useWorldUI.getState().partner;
+  // ride with your partner if their cabin is at the platform right now
+  const theirs = partner?.seat?.key === 'ferris' ? partner.seat.cabin ?? 0 : null;
+  const next = theirs !== null && ferrisAtPlatform(t, theirs) ? { cabin: theirs, wait: 0 } : ferrisNext(t);
+  // stand on the platform facing the wheel meanwhile
+  const [x, , z] = toWorld(it.place, 0, 0, 2.4);
+  Object.assign(live.me, { x, z, ry: it.place.rot + Math.PI, pose: 'stand', moving: false });
+  live.target = null;
+  if (next.wait > 0.3) {
+    live.ferrisWait = { cabin: next.cabin, at: t + next.wait };
+    useWorldUI.setState({ ferrisWaiting: true, nearby: null });
+    h.toast(`Next cabin in ${Math.ceil(next.wait)}s — wait on the platform 🎡`);
+    return;
+  }
+  getInCabin(next.cabin, h);
+}
+
+/** Step into a Ferris cabin that's at the platform now. */
+export function getInCabin(cabin: number, h: ActionHelpers) {
+  const partner = useWorldUI.getState().partner;
+  const taken = partner?.seat?.key === 'ferris' && (partner.seat.cabin ?? 0) === cabin ? partner.seat.idx : -1;
+  live.ferrisWait = null;
+  live.ferrisBoarded = now();
+  useWorldUI.setState({ ferrisWaiting: false, ferrisLeaving: false, seat: { key: 'ferris', idx: taken === 0 ? 1 : 0, cabin }, nearby: null });
+  navigator.vibrate?.(25);
+  h.reward('ferris');
+}
+
+export function cancelFerrisWait() {
+  live.ferrisWait = null;
+  useWorldUI.setState({ ferrisWaiting: false });
+}
+
+/** Boat race: into your own speedboat on the start line, 3-2-1-go. */
+function startRace(h: ActionHelpers) {
+  const boat = h.isFirst ? 'boatA' : 'boatB';
+  const start = raceStart(h.isFirst ? 0 : 1);
+  live.vehicles[boat] = { x: start.x, z: start.z, ry: start.ry };
+  live.vehicleSpeed = 0;
+  live.yaw = start.ry + Math.PI;
+  live.teleported += 1;
+  useWorldUI.setState({
+    seat: { key: boat, idx: 0 },
+    nearby: null,
+    race: { phase: 'countdown', start: now() + 3.5, gate: 0, time: null, boat },
+  });
+  h.reward('speedboat');
+}
+
 export function climbDown(placements: Placement[]) {
   const th = placements.find((p) => p.id === 'treehouse');
   if (!th) return;
@@ -191,23 +262,42 @@ export function hugPartner(h: ActionHelpers) {
   h.reward('hug');
 }
 
-/** A hug arrived: turn to them and hug back if you're free and close. */
-function hugBack(p: RemotePose) {
+/** Walk up to your partner and kiss. */
+export function kissPartner(h: ActionHelpers) {
+  const p = live.partner;
+  if (!p) return;
+  const dx = p.x - live.me.x;
+  const dz = p.z - live.me.z;
+  const d = Math.hypot(dx, dz) || 1;
+  live.me.ry = Math.atan2(dx, dz);
+  if (d > 0.6) {
+    live.me.x = p.x - (dx / d) * 0.5;
+    live.me.z = p.z - (dz / d) * 0.5;
+  }
+  emote('kiss');
+  h.reward('kiss');
+}
+
+/** A hug or kiss arrived: turn to them and do it back if you're free and close. */
+function hugBack(p: RemotePose, kind: 'hug' | 'kiss') {
   const ui = useWorldUI.getState();
   if (ui.seat || ui.area !== p.area) return;
   const dx = p.x - live.me.x;
   const dz = p.z - live.me.z;
   if (Math.hypot(dx, dz) > 3.5) return;
   live.me.ry = Math.atan2(dx, dz);
-  live.myEmote = { kind: 'hug', until: now() + 3 };
+  live.myEmote = { kind, until: now() + 3 };
   navigator.vibrate?.([80, 60, 160]);
 }
 
 /** Private live channel: both avatars' poses and emotes. */
-export function joinWorld(onPartnerChange: (here: boolean) => void, onHugged: () => void): () => void {
+export function joinWorld(onPartnerChange: (here: boolean) => void, onHugged: (kind: 'hug' | 'kiss') => void): () => void {
   if (!supabase) return () => {};
   const client = supabase;
   const channel = client.channel('ivy_world', { config: { private: true, broadcast: { self: false } } });
+  // Only send over the open socket: before it connects, supabase falls back to one HTTP
+  // request per message (10 a second while walking), which drains the battery
+  let joined = false;
   const syncUI = (p: RemotePose | null) => {
     const prev = useWorldUI.getState().partner;
     if (!p) {
@@ -235,21 +325,23 @@ export function joinWorld(onPartnerChange: (here: boolean) => void, onHugged: ()
       syncUI(p);
     })
     .on('broadcast', { event: 'emote' }, ({ payload }) => {
-      const { kind } = payload as { kind: EmoteKind };
-      live.partnerEmote = { kind, until: now() + 3 };
-      if (kind === 'hug' && live.partner) {
-        hugBack(live.partner);
-        onHugged();
+      const { kind, emoji } = payload as { kind: EmoteKind; emoji?: string };
+      live.partnerEmote = { kind, until: now() + (kind === 'dance' ? 6 : 3), emoji };
+      if ((kind === 'hug' || kind === 'kiss') && live.partner) {
+        hugBack(live.partner, kind);
+        onHugged(kind);
       }
     })
     .on('broadcast', { event: 'leave' }, () => {
       live.partner = null;
       syncUI(null);
     })
-    .subscribe();
+    .subscribe((status) => {
+      joined = status === 'SUBSCRIBED';
+    });
 
   live.send = (event, payload) => {
-    void channel.send({ type: 'broadcast', event, payload });
+    if (joined) void channel.send({ type: 'broadcast', event, payload });
   };
   // Forget a partner whose phone went quiet
   const stale = window.setInterval(() => {
@@ -261,7 +353,7 @@ export function joinWorld(onPartnerChange: (here: boolean) => void, onHugged: ()
 
   return () => {
     window.clearInterval(stale);
-    void channel.send({ type: 'broadcast', event: 'leave', payload: {} });
+    if (joined) void channel.send({ type: 'broadcast', event: 'leave', payload: {} });
     live.send = () => {};
     live.partner = null;
     useWorldUI.setState({ partner: null });

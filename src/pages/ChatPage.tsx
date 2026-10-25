@@ -696,6 +696,54 @@ const ChatPage: React.FC = () => {
     return <CornerDownLeft className="w-3.5 h-3.5 text-[#C95565]" />;
   };
 
+  // The message list only changes with the messages, never while typing: memoised so each
+  // key press re-renders the input box, not hundreds of bubbles
+  const messageList = useMemo(
+    () =>
+      messages.map((msg, idx) => {
+          const prevMsg = messages[idx - 1];
+          const nextMsg = messages[idx + 1];
+          const showDateSeparator =
+            !prevMsg ||
+            new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString();
+          // Consecutive messages from the same person within 5 minutes form a group
+          const sameRun = (a?: Message, b?: Message) =>
+            Boolean(a && b && a.sender_id === b.sender_id && a.message_type !== 'system' && b.message_type !== 'system' &&
+              Math.abs(new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) < 5 * 60_000 &&
+              new Date(a.created_at).toDateString() === new Date(b.created_at).toDateString());
+          const isFirstInGroup = showDateSeparator || !sameRun(prevMsg, msg);
+          const isLastInGroup = !sameRun(msg, nextMsg);
+          if (albums.hidden.has(msg.local_uuid)) return null;
+
+          return (
+            <React.Fragment key={msg.local_uuid || msg.id}>
+              {showDateSeparator && (
+                <div className="flex justify-center mt-3 mb-1.5 sticky top-1.5 z-10">
+                  <span className="wa-pill uppercase !text-[12px]">
+                    {formatDateSeparator(msg.created_at)}
+                  </span>
+                </div>
+              )}
+
+              <MessageBubble
+                message={msg}
+                onLongPress={handleMessageLongPress}
+                onReactionClick={handleReactionClick}
+                onMediaClick={handleMediaClick}
+                onSwipeToReply={handleSwipeToReply}
+                onRetry={handleRetry}
+                onJumpToOriginal={handleJump}
+                isFirstInGroup={isFirstInGroup}
+                isLastInGroup={isLastInGroup}
+                album={albums.leaders.get(msg.local_uuid)}
+                highlight={isSearchOpen && searchMatches.includes(msg.local_uuid) ? searchTerm : undefined}
+              />
+            </React.Fragment>
+          );
+        }),
+    [messages, albums, isSearchOpen, searchMatches, searchTerm, handleMessageLongPress, handleReactionClick, handleMediaClick, handleSwipeToReply, handleRetry, handleJump]
+  );
+
   const hasText = inputContent.trim().length > 0;
   const isTyping = subtext.includes('Typing') || subtext.includes('Recording');
 
@@ -919,47 +967,7 @@ const ChatPage: React.FC = () => {
           </div>
         )}
 
-        {messages.map((msg, idx) => {
-          const prevMsg = messages[idx - 1];
-          const nextMsg = messages[idx + 1];
-          const showDateSeparator =
-            !prevMsg ||
-            new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString();
-          // Consecutive messages from the same person within 5 minutes form a group
-          const sameRun = (a?: Message, b?: Message) =>
-            Boolean(a && b && a.sender_id === b.sender_id && a.message_type !== 'system' && b.message_type !== 'system' &&
-              Math.abs(new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) < 5 * 60_000 &&
-              new Date(a.created_at).toDateString() === new Date(b.created_at).toDateString());
-          const isFirstInGroup = showDateSeparator || !sameRun(prevMsg, msg);
-          const isLastInGroup = !sameRun(msg, nextMsg);
-          if (albums.hidden.has(msg.local_uuid)) return null;
-
-          return (
-            <React.Fragment key={msg.local_uuid || msg.id}>
-              {showDateSeparator && (
-                <div className="flex justify-center mt-3 mb-1.5 sticky top-1.5 z-10">
-                  <span className="wa-pill uppercase !text-[12px]">
-                    {formatDateSeparator(msg.created_at)}
-                  </span>
-                </div>
-              )}
-
-              <MessageBubble
-                message={msg}
-                onLongPress={handleMessageLongPress}
-                onReactionClick={handleReactionClick}
-                onMediaClick={handleMediaClick}
-                onSwipeToReply={handleSwipeToReply}
-                onRetry={handleRetry}
-                onJumpToOriginal={handleJump}
-                isFirstInGroup={isFirstInGroup}
-                isLastInGroup={isLastInGroup}
-                album={albums.leaders.get(msg.local_uuid)}
-                highlight={isSearchOpen && searchMatches.includes(msg.local_uuid) ? searchTerm : undefined}
-              />
-            </React.Fragment>
-          );
-        })}
+        {messageList}
 
         {/* Partner typing bubble */}
         <AnimatePresence>

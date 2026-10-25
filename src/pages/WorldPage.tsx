@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronLeft, Move, Shirt, Check, RotateCcw, RotateCw, Undo2, LogOut, ArrowDownToLine, Heart, Target } from 'lucide-react';
+import { ChevronLeft, Move, Shirt, Check, RotateCcw, RotateCw, Undo2, LogOut, ArrowDownToLine, Heart, Target, BatteryLow, BatteryFull, X } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useGameStore } from '../store/useGameStore';
 import { useCoupleStore } from '../store/useCoupleStore';
@@ -28,12 +28,15 @@ import {
   WORLD_SPOTS,
 } from '../components/World/worldData';
 import { clothKey, completeLook, type Cloth, type Look } from '../components/World/wardrobe';
+import { RACE_GATES } from '../components/World/terrain';
 import {
   activate,
+  cancelFerrisWait,
   climbDown,
   emote,
   enterDressing,
   hugPartner,
+  kissPartner,
   joinWorld,
   leaveArea,
   leaveDressing,
@@ -48,6 +51,9 @@ function phaseFor(hour: number): Phase {
 }
 
 const HINT_KEY = 'ivy_world_hint_seen';
+const BEST_KEY = 'ivy_boat_race_best';
+const EMOJIS = ['😘', '🥰', '😍', '😂', '🤣', '😊', '🥺', '😢', '😭', '😡', '😴', '🤔', '😎', '🤩', '😜', '🙈', '👍', '🙏', '👏', '💪', '🔥', '🎉', '💯', '✨', '❤️', '💕', '💋', '🌹', '🍫', '☕', '🍕', '🎶'];
+const fmtTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
 const glass = 'bg-white/70 dark:bg-stone-900/60 backdrop-blur-md ring-1 ring-white/60 dark:ring-white/10 shadow-lg';
 
 /** Our 3D world: walk around together, ride things, dress up, arrange everything. */
@@ -74,7 +80,20 @@ const WorldPage: React.FC = () => {
   const selected = useWorldUI((s) => s.selected);
   const partnerHere = useWorldUI((s) => s.partner);
   const questsOpen = useWorldUI((s) => s.questsOpen);
+  const ferrisWaiting = useWorldUI((s) => s.ferrisWaiting);
+  const ferrisLeaving = useWorldUI((s) => s.ferrisLeaving);
+  const race = useWorldUI((s) => s.race);
+  const saver = useWorldUI((s) => s.saver);
+  const setSaver = useWorldUI((s) => s.setSaver);
   const setMode = useWorldUI((s) => s.setMode);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  // race clock / countdown ticks
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!race && !ferrisWaiting) return;
+    const id = setInterval(() => tick((n) => n + 1), 100);
+    return () => clearInterval(id);
+  }, [race, ferrisWaiting]);
 
   const [phase, setPhase] = useState<Phase>(() => phaseFor(new Date().getHours()));
   // the balloon's landing state lives outside React; re-render when you ask to land
@@ -136,10 +155,12 @@ const WorldPage: React.FC = () => {
     live.ride = null;
     live.teleported += 1;
     resetVehicles();
-    useWorldUI.setState({ mode: 'play', area: 'out', seat: null, nearby: null, selected: null, questsOpen: false });
+    live.ferrisWait = null;
+    live.vel = { x: 0, z: 0 };
+    useWorldUI.setState({ mode: 'play', area: 'out', seat: null, nearby: null, selected: null, questsOpen: false, race: null, ferrisWaiting: false, ferrisLeaving: false });
     const leave = joinWorld(
       (here) => addToast(here ? `${partnerName} came into our world 💞` : `${partnerName} left our world`, here ? 'success' : 'info'),
-      () => reward('hug')
+      (kind) => reward(kind)
     );
     const t = setInterval(() => setPhase(phaseFor(new Date().getHours())), 60_000);
     return () => {
@@ -215,8 +236,43 @@ const WorldPage: React.FC = () => {
   const turn = (by: number) => sel && void place(sel.id, { x: sel.x, z: sel.z, rot: sel.rot + by, size: sel.size });
   const resize = (size: number, save: boolean) => sel && void place(sel.id, { x: sel.x, z: sel.z, rot: sel.rot, size }, save);
 
+  // Race result: your time, your best, and who won if you raced together
+  const raceTime = race?.time ?? null;
+  const partnerRace = partnerHere?.race;
+  const [best, setBest] = useState<number | null>(() => {
+    try {
+      const v = localStorage.getItem(BEST_KEY);
+      return v ? Number(v) : null;
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    if (raceTime === null || (best !== null && best <= raceTime)) return;
+    setBest(raceTime);
+    try {
+      localStorage.setItem(BEST_KEY, String(raceTime));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [raceTime, best]);
+  const together = race && partnerRace && Math.abs(partnerRace.start - race.start) < 15;
+  const won = together && raceTime !== null && (partnerRace!.time === null || raceTime < partnerRace!.time);
+  useEffect(() => {
+    // beating your partner in a race together counts as the "together" bonus
+    if (won) reward('race', true);
+  }, [won, reward]);
+
   const standLabel =
-    seatIt?.action === 'ride'
+    seatIt?.action === 'ferris'
+      ? ferrisLeaving
+        ? 'Getting off at the bottom…'
+        : 'Get off at the bottom'
+      : race
+        ? race.phase === 'done'
+          ? 'Back to the jetty'
+          : 'Quit the race'
+        : seatIt?.action === 'ride'
       ? flying
         ? '🎈 Land the balloon'
         : '🎈 Landing…'
@@ -224,7 +280,7 @@ const WorldPage: React.FC = () => {
         ? seat?.idx === 0
           ? 'Park & get out'
           : 'Get out'
-        : seatIt?.action === 'train' || seatIt?.action === 'ferris'
+        : seatIt?.action === 'train'
           ? 'Get off'
           : 'Stand up';
 
@@ -281,6 +337,17 @@ const WorldPage: React.FC = () => {
                 {partnerHere ? `${partnerName} is here 💞` : `Call ${partnerName} 💗`}
               </button>
               <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setSaver(!saver);
+                    addToast(saver ? 'Full graphics on ✨' : 'Battery saver on 🔋 — cooler and smoother on phones', 'info');
+                  }}
+                  className={`pointer-events-auto ${glass} w-10 h-10 rounded-full flex items-center justify-center ${saver ? 'text-emerald-600' : 'text-stone-700 dark:text-stone-100'} active:scale-95`}
+                  aria-label={saver ? 'Battery saver is on' : 'Battery saver is off'}
+                  title={saver ? 'Battery saver is on' : 'Turn on battery saver'}
+                >
+                  {saver ? <BatteryLow className="w-4 h-4" /> : <BatteryFull className="w-4 h-4" />}
+                </button>
                 {area === 'out' && (
                   <>
                     <button
@@ -344,6 +411,112 @@ const WorldPage: React.FC = () => {
                   </div>
                 );
               })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Boat race */}
+      {race && (
+        <div className="pointer-events-none absolute inset-x-0 top-20 flex flex-col items-center gap-2">
+          <div className={`${glass} rounded-full px-4 py-1.5 text-sm font-bold text-stone-800 dark:text-stone-100 tabular-nums flex items-center gap-3`}>
+            <span>🏁 {race.phase === 'done' ? 'Finished!' : race.gate === 0 ? 'Start' : race.gate >= RACE_GATES ? 'Finish line next' : `Gate ${race.gate}/${RACE_GATES}`}</span>
+            <span>⏱ {fmtTime(race.time ?? Math.max(0, Date.now() / 1000 - race.start))}</span>
+            {best !== null && <span className="text-xs font-semibold text-stone-500">best {fmtTime(best)}</span>}
+          </div>
+          {partnerRace && together && race.phase !== 'done' && (
+            <div className={`${glass} rounded-full px-3 py-1 text-[11px] font-semibold text-stone-600 dark:text-stone-200`}>
+              {partnerName}: {partnerRace.time !== null ? `finished ${fmtTime(partnerRace.time)}` : `gate ${Math.min(partnerRace.gate, RACE_GATES)}/${RACE_GATES}`}
+            </div>
+          )}
+          <AnimatePresence>
+            {race.phase === 'countdown' && (
+              <motion.p
+                key={Math.ceil(race.start - Date.now() / 1000)}
+                initial={{ scale: 2, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="font-cute text-7xl font-bold text-white drop-shadow-[0_4px_10px_rgba(0,0,0,0.35)] mt-16"
+              >
+                {Math.max(1, Math.ceil(race.start - Date.now() / 1000))}
+              </motion.p>
+            )}
+            {race.phase === 'go' && Date.now() / 1000 - race.start < 1 && (
+              <motion.p initial={{ scale: 2, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }} className="font-cute text-7xl font-bold text-emerald-400 drop-shadow-lg mt-16">
+                GO!
+              </motion.p>
+            )}
+          </AnimatePresence>
+          {race.phase === 'done' && (
+            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`${glass} rounded-3xl px-6 py-4 text-center mt-8`}>
+              <p className="text-3xl">{together ? (won ? '🏆' : partnerRace!.time === null ? '⏳' : '🥈') : '🎉'}</p>
+              <p className="font-serif italic text-xl text-stone-800 dark:text-stone-100">
+                {together ? (won ? 'You won!' : partnerRace!.time === null ? `Waiting for ${partnerName}…` : `${partnerName} won this time`) : 'Race finished!'}
+              </p>
+              <p className="text-sm text-stone-600 dark:text-stone-300 tabular-nums">
+                {fmtTime(raceTime ?? 0)}
+                {best !== null && raceTime !== null && raceTime <= best ? ' · new best! ✨' : ''}
+              </p>
+            </motion.div>
+          )}
+        </div>
+      )}
+
+      {/* Waiting for a Ferris wheel cabin */}
+      {ferrisWaiting && live.ferrisWait && (
+        <div className="absolute inset-x-0 top-24 flex justify-center pointer-events-none">
+          <div className={`pointer-events-auto ${glass} rounded-full pl-4 pr-1.5 py-1.5 text-sm font-semibold text-stone-700 dark:text-stone-100 flex items-center gap-2`}>
+            🎡 Cabin arriving in {Math.max(0, Math.ceil(live.ferrisWait.at - Date.now() / 1000))}s
+            <button onClick={cancelFerrisWait} className="w-7 h-7 rounded-full bg-white/80 dark:bg-white/10 flex items-center justify-center" aria-label="Stop waiting">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Emoji picker */}
+      <AnimatePresence>
+        {emojiOpen && mode === 'play' && area !== 'dressing' && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 10 }}
+            className={`absolute right-3 bottom-[17rem] ${glass} rounded-3xl p-3 w-[17rem]`}
+          >
+            <div className="grid grid-cols-8 gap-1">
+              {EMOJIS.map((e) => (
+                <button
+                  key={e}
+                  onClick={() => {
+                    emote('emoji', e);
+                    setEmojiOpen(false);
+                  }}
+                  className="text-2xl leading-none p-1 rounded-xl active:scale-90 hover:bg-white/60 dark:hover:bg-white/10 transition-transform"
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <button
+                onClick={() => {
+                  emote('dance');
+                  setEmojiOpen(false);
+                }}
+                className="rounded-full py-2 text-xs font-semibold bg-white/80 dark:bg-white/10 text-stone-700 dark:text-stone-200"
+              >
+                💃 Dance
+              </button>
+              <button
+                onClick={() => {
+                  if (canHug) kissPartner(helpers);
+                  else emote('kiss');
+                  setEmojiOpen(false);
+                }}
+                className="rounded-full py-2 text-xs font-semibold btn-gloss"
+              >
+                💋 {canHug ? `Kiss ${partnerName}` : 'Blow a kiss'}
+              </button>
             </div>
           </motion.div>
         )}
@@ -417,6 +590,13 @@ const WorldPage: React.FC = () => {
 
           {/* Emotes */}
           <div className="pointer-events-auto flex flex-col gap-2">
+            <button
+              onClick={() => setEmojiOpen((o) => !o)}
+              className={`${glass} w-12 h-12 rounded-full text-xl active:scale-90 transition-transform ${emojiOpen ? 'ring-2 ring-[#E05A74]' : ''}`}
+              aria-label="Emojis, dance and kiss"
+            >
+              😊
+            </button>
             <button onClick={() => emote('hearts')} className={`${glass} w-12 h-12 rounded-full text-xl active:scale-90 transition-transform`} aria-label="Send hearts">
               💗
             </button>

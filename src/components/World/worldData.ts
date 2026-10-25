@@ -1,10 +1,23 @@
 /** Layout, collisions and things to do in our 3D world (pure data + math, no React). */
+import {
+  DOCK,
+  LIGHTHOUSE,
+  PADDOCK,
+  PARKING,
+  RAIL,
+  STATION,
+  angleOf,
+  coastR,
+  inland,
+  polar,
+  railR,
+} from './terrain';
 
 export type Area = 'out' | 'home' | 'treehouse' | 'dressing';
-export type AvatarPose = 'stand' | 'walk' | 'sit' | 'sitLow' | 'lie' | 'hug' | 'wave' | 'swing' | 'pedal';
+export type AvatarPose = 'stand' | 'walk' | 'sit' | 'sitLow' | 'lie' | 'hug' | 'wave' | 'swing' | 'pedal' | 'straddle' | 'dance' | 'kiss';
 export type ActionKind =
   | 'sit' | 'swing' | 'boat' | 'ride' | 'lie' | 'stand' | 'wish' | 'stargaze'
-  | 'drive' | 'cycle' | 'train' | 'ferris'
+  | 'drive' | 'cycle' | 'gallop' | 'sail' | 'train' | 'ferris' | 'race'
   | 'enter' | 'exit' | 'climb' | 'pet' | 'letter' | 'dress';
 
 /** A spot to sit/lie/stand, in the item's own space (before turning and resizing). */
@@ -40,10 +53,6 @@ export interface SpotDef {
   span?: number;
 }
 
-export const ISLAND_RADIUS = 33;
-/** The ring road the train runs on (and the car loves) */
-export const ROAD_RADIUS = 28;
-export const ROAD_WIDTH = 2.6;
 /** The dressing room, far below the island too */
 export const DRESS_ORIGIN: [number, number, number] = [0, -200, 0];
 /** The inside of our cottage lives far below the island */
@@ -52,6 +61,8 @@ export const HOME_HALF: [number, number] = [4.6, 3.6];
 export const TREEHOUSE_HEIGHT = 3.4;
 export const PLAYER_RADIUS = 0.32;
 export const BALLOON_TOP = 16;
+/** Height of the sea (boats float here) */
+export const SEA_Y = -0.5;
 
 const pair = (x: number, y: number, z: number, ry: number, pose: AvatarPose, gap = 0.4): Seat[] => [
   { x: x - gap, y, z, ry, pose },
@@ -86,25 +97,64 @@ export const WORLD_SPOTS: Record<string, SpotDef & { x: number; z: number; rot: 
   gazebo: { x: 5.5, z: -11, rot: 0.1, radius: 0, reach: 0.4, action: 'sit', label: 'Sit in the gazebo', seats: pair(0, 0.48, -0.95, 0, 'sit'), exit: [0, 0, 0.6] },
 };
 
+const dockPlace: Placement = { id: 'dock', x: DOCK.x, y: 0, z: DOCK.z, rot: DOCK.rot, size: 1 };
+const parkingPlace: Placement = { id: 'parking', x: PARKING.x, y: 0, z: PARKING.z, rot: PARKING.rot, size: 1 };
+const paddockPlace: Placement = { id: 'paddock', x: PADDOCK.x, y: 0, z: PADDOCK.z, rot: PADDOCK.rot, size: 1 };
+const [dockTipX, , dockTipZ] = toWorld(dockPlace, 0, 0, DOCK.length - 1.5);
+
 /** Always in our world (not bought in the shop, can't be moved). */
 export const FIXED_SPOTS: Record<string, SpotDef & { x: number; z: number; rot: number }> = {
   boutique: { x: 17, z: 13.5, rot: -0.9, radius: 2.3, reach: 1.3, action: 'dress', label: 'Dressing room 👗' },
-  station: { x: 8, z: 24.6, rot: 0, radius: 0, reach: 1.6, action: 'train', label: 'Ride the train 🚂', span: 2.2 },
-  ferris: { x: -18, z: -17, rot: 0.75, radius: 2.4, reach: 1.4, action: 'ferris', label: 'Ride the Ferris wheel 🎡' },
-  parking: { x: -5, z: 21.5, rot: 0, radius: 0, reach: 0 },
+  station: { x: STATION.x, z: STATION.z, rot: STATION.rot, radius: 0, reach: 1.6, action: 'train', label: 'Ride the train 🚂', span: 2.2 },
+  ferris: { x: -4, z: -17.5, rot: 0.2, radius: 2.4, reach: 1.6, action: 'ferris', label: 'Ride the Ferris wheel 🎡' },
+  parking: { x: PARKING.x, z: PARKING.z, rot: PARKING.rot, radius: 0, reach: 0 },
+  paddock: { x: PADDOCK.x, z: PADDOCK.z, rot: PADDOCK.rot, radius: 0, reach: 0 },
+  dock: { x: dockTipX, z: dockTipZ, rot: DOCK.rot, radius: 0, reach: 1.4, action: 'race', label: 'Start a boat race 🏁' },
+  lighthouse: { x: LIGHTHOUSE.x, z: LIGHTHOUSE.z, rot: 0, radius: 1.6, reach: 0 },
+};
+
+export interface VehicleDef extends SpotDef {
+  x: number;
+  z: number;
+  rot: number;
+  speed: number;
+  /** Turning speed (radians a second at full speed) */
+  turn: number;
+  /** Boats stay in the sea */
+  water?: boolean;
+}
+
+const vAt = (p: Placement, lx: number, lz: number, rot = 0) => {
+  const [x, , z] = toWorld(p, lx, 0, lz);
+  return { x, z, rot: p.rot + rot };
 };
 
 /** Vehicles: where they wait at first, and their seats (in vehicle space, facing +z). */
-export const VEHICLES: Record<string, SpotDef & { x: number; z: number; rot: number; speed: number }> = {
+export const VEHICLES: Record<string, VehicleDef> = {
   car: {
-    x: -6.6, z: 21.5, rot: Math.PI / 2, speed: 9, radius: 1.1, reach: 0.9, action: 'drive', label: 'Drive the car 🚗',
+    ...vAt(parkingPlace, -1.8, 0), speed: 10, turn: 2.0, radius: 1.1, reach: 0.9, action: 'drive', label: 'Drive the car 🚗',
     seats: [{ x: -0.36, y: 0.42, z: -0.1, ry: 0, pose: 'sit' }, { x: 0.36, y: 0.42, z: -0.1, ry: 0, pose: 'sit' }],
     exit: [-1.6, 0, 0],
   },
   bike: {
-    x: -2.8, z: 21.8, rot: Math.PI / 2, speed: 6, radius: 0.7, reach: 1.0, action: 'cycle', label: 'Ride the bike for two 🚲',
+    ...vAt(parkingPlace, 1.6, 0), speed: 6.5, turn: 2.8, radius: 0.7, reach: 1.0, action: 'cycle', label: 'Ride the bike for two 🚲',
     seats: [{ x: 0, y: 0.82, z: 0.42, ry: 0, pose: 'pedal' }, { x: 0, y: 0.82, z: -0.42, ry: 0, pose: 'pedal' }],
     exit: [-1.1, 0, 0],
+  },
+  horse: {
+    ...vAt(paddockPlace, 0, 0, Math.PI / 2), speed: 8, turn: 2.6, radius: 0.8, reach: 1.0, action: 'gallop', label: 'Ride the horse together 🐴',
+    seats: [{ x: 0, y: 1.22, z: 0.12, ry: 0, pose: 'straddle' }, { x: 0, y: 1.2, z: -0.42, ry: 0, pose: 'straddle' }],
+    exit: [-1.2, 0, 0],
+  },
+  boatA: {
+    ...vAt(dockPlace, -2.6, DOCK.length - 3), speed: 15, turn: 1.7, radius: 1.2, reach: 1.6, action: 'sail', label: 'Drive the pink speedboat 🚤', water: true,
+    seats: [{ x: 0, y: 0.45, z: -0.3, ry: 0, pose: 'sit' }],
+    exit: [2.6, 0, 0],
+  },
+  boatB: {
+    ...vAt(dockPlace, 2.6, DOCK.length - 3), speed: 15, turn: 1.7, radius: 1.2, reach: 1.6, action: 'sail', label: 'Drive the blue speedboat 🚤', water: true,
+    seats: [{ x: 0, y: 0.45, z: -0.3, ry: 0, pose: 'sit' }],
+    exit: [-2.6, 0, 0],
   },
 };
 
@@ -140,6 +190,15 @@ export function toWorld(p: Placement, lx: number, ly: number, lz: number): [numb
   const x = lx * p.size;
   const z = lz * p.size;
   return [p.x + x * c + z * s, p.y + ly * p.size, p.z - x * s + z * c];
+}
+
+/** The other way: a world point in an item's own space (ignoring size). */
+export function toLocal(p: { x: number; z: number; rot: number }, x: number, z: number): [number, number] {
+  const c = Math.cos(p.rot);
+  const s = Math.sin(p.rot);
+  const dx = x - p.x;
+  const dz = z - p.z;
+  return [dx * c - dz * s, dx * s + dz * c];
 }
 
 /** Where every build stands (stored spot, else its default). */
@@ -181,7 +240,7 @@ export function interactables(area: Area, placements: Placement[]): Interactable
 export function vehicleInteractables(at: Record<string, { x: number; z: number; ry: number }>): Interactable[] {
   return Object.entries(VEHICLES).map(([id, d]) => {
     const v = at[id] ?? { x: d.x, z: d.z, ry: d.rot };
-    return { ...d, key: id, vehicle: true, place: { id, x: v.x, y: 0, z: v.z, rot: v.ry, size: 1 } };
+    return { ...d, key: id, vehicle: true, place: { id, x: v.x, y: d.water ? SEA_Y : 0, z: v.z, rot: v.ry, size: 1 } };
   });
 }
 
@@ -241,8 +300,8 @@ export interface WorldPose {
   pose: AvatarPose;
 }
 
-/** Where someone sitting in seat `idx` of `it` is right now. */
-export function seatPose(it: Interactable, idx: number, t: number, balloonAlt = 0): WorldPose {
+/** Where someone sitting in seat `idx` of `it` is right now (`cabin`: which Ferris cabin). */
+export function seatPose(it: Interactable, idx: number, t: number, balloonAlt = 0, cabin = 0): WorldPose {
   const p = it.place;
   if (it.action === 'swing') {
     // the seat hangs below the pivot and swings with it (same maths as the model's rotation.x)
@@ -260,7 +319,7 @@ export function seatPose(it: Interactable, idx: number, t: number, balloonAlt = 
     return { x: c.x + s.x * cs + s.z * sn, y: s.y, z: c.z - s.x * sn + s.z * cs, ry: c.heading, tilt: 0, pose: 'sit' };
   }
   if (it.action === 'ferris') {
-    const cab = ferrisCabin(t, 0);
+    const cab = ferrisCabin(t, cabin);
     const s = FERRIS_SEATS[idx];
     const [x, y, z] = toWorld(p, cab.x + s.x, cab.y + s.y, s.z);
     return { x, y, z, ry: p.rot + s.ry, tilt: 0, pose: 'sit' };
@@ -275,51 +334,81 @@ export function seatPose(it: Interactable, idx: number, t: number, balloonAlt = 
   }
   const s = it.seats![idx];
   const [x, y, z] = toWorld(p, s.x, s.y, s.z);
+  // Speedboats bob on the waves
+  const bob = it.vehicle && VEHICLES[it.key]?.water ? Math.sin(t * 2.4 + p.x) * 0.06 : 0;
   // Hips sit on the seat; the size changes the seat height, not us
-  return { x, y: it.action === 'ride' ? p.y + balloonAlt + s.y * p.size : y, z, ry: p.rot + s.ry, tilt: 0, pose: s.pose };
+  return { x, y: (it.action === 'ride' ? p.y + balloonAlt + s.y * p.size : y) + bob, z, ry: p.rot + s.ry, tilt: 0, pose: s.pose };
 }
 
 export function seatCount(it: Interactable): number {
   return it.action === 'boat' || it.action === 'train' || it.action === 'ferris' ? 2 : it.seats?.length ?? 0;
 }
 
-export const SEAT_ACTIONS: ActionKind[] = ['sit', 'swing', 'boat', 'ride', 'lie', 'stand', 'wish', 'stargaze', 'drive', 'cycle', 'train', 'ferris'];
+export const SEAT_ACTIONS: ActionKind[] = ['sit', 'swing', 'boat', 'ride', 'lie', 'stand', 'wish', 'stargaze', 'drive', 'cycle', 'gallop', 'sail', 'train', 'ferris'];
+/** Things you steer with the stick */
+export const DRIVE_ACTIONS: ActionKind[] = ['drive', 'cycle', 'gallop', 'sail'];
 
-/* ── The train goes round the ring road ── */
+/* ── The train runs on its own railway near the sea ── */
 export const TRAIN_CARS = 3;
-const TRAIN_SPEED = 0.07; // radians a second: about 90 s round the island
-const TRAIN_GAP = 0.13; // radians between cars
+const TRAIN_SPEED = 5; // metres a second: about 50 s round the island
+const TRAIN_GAP = 2.9; // metres between cars
 const TRAIN_SEATS: Seat[] = [
   { x: -0.32, y: 0.62, z: 0, ry: 0, pose: 'sit' },
   { x: 0.32, y: 0.62, z: 0, ry: 0, pose: 'sit' },
 ];
-/** Car `i` (0 = engine) of the train: position on the road and which way it faces. */
+/** Car `i` (0 = engine) of the train: where it is on the railway and which way it faces. */
 export function trainAt(t: number, i: number): { x: number; z: number; heading: number } {
-  const a = t * TRAIN_SPEED - i * TRAIN_GAP;
-  // moving along d/da = (-sin a, -cos a); a heading `ry` faces (sin ry, cos ry)
-  return { x: Math.cos(a) * ROAD_RADIUS, z: -Math.sin(a) * ROAD_RADIUS, heading: Math.atan2(-Math.sin(a), -Math.cos(a)) };
+  return RAIL.at(t * TRAIN_SPEED - i * TRAIN_GAP);
 }
 
-/* ── The Ferris wheel turns slowly; you ride in cabin 0 ── */
+/* ── The Ferris wheel turns slowly; you get on and off at the bottom ── */
 export const FERRIS_HUB = 8.2;
 export const FERRIS_RADIUS = 5.6;
 export const FERRIS_CABINS = 8;
+export const FERRIS_SPEED = 0.1; // radians a second: one turn in about a minute
 const FERRIS_SEATS: Seat[] = [
   { x: -0.3, y: -0.08, z: -0.18, ry: 0, pose: 'sit' },
   { x: 0.3, y: -0.08, z: -0.18, ry: 0, pose: 'sit' },
 ];
+/** How far round cabin `i` is from the bottom (0…2π). */
+const ferrisPhase = (t: number, i: number) => (((t * FERRIS_SPEED + (i / FERRIS_CABINS) * Math.PI * 2) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
 /** Where cabin `i` hangs right now (wheel space: x across, y up). */
 export function ferrisCabin(t: number, i: number): { x: number; y: number } {
-  const a = t * 0.1 + (i / FERRIS_CABINS) * Math.PI * 2 - Math.PI / 2;
+  const a = ferrisPhase(t, i) - Math.PI / 2;
   return { x: Math.cos(a) * FERRIS_RADIUS, y: FERRIS_HUB + Math.sin(a) * FERRIS_RADIUS - 1.65 };
 }
+/** Seconds since cabin `i` last passed the bottom, and until it next does. */
+export function ferrisBottom(t: number, i: number): { since: number; until: number } {
+  const ph = ferrisPhase(t, i);
+  return { since: ph / FERRIS_SPEED, until: (Math.PI * 2 - ph) / FERRIS_SPEED };
+}
+/** The next cabin to reach the platform, and how long until it does. */
+export function ferrisNext(t: number): { cabin: number; wait: number } {
+  let best = { cabin: 0, wait: Infinity };
+  for (let i = 0; i < FERRIS_CABINS; i++) {
+    const b = ferrisBottom(t, i);
+    // one that has only just passed still counts as "here"
+    const wait = b.since < 1 ? 0 : b.until;
+    if (wait < best.wait) best = { cabin: i, wait };
+  }
+  return best;
+}
+/** Close enough to the bottom to step in or out */
+export const ferrisAtPlatform = (t: number, i: number) => {
+  const b = ferrisBottom(t, i);
+  return b.since < 1.2 || b.until < 0.4;
+};
 
-/** Where to step off a moving ride (beside the road for the train). */
+/** Where to step off a moving ride (beside the railway for the train, the platform for the wheel). */
 export function rideExit(it: Interactable, t: number): [number, number] | null {
   if (it.action === 'train') {
     const c = trainAt(t, 1);
-    const k = (ROAD_RADIUS - 2.4) / ROAD_RADIUS;
-    return [c.x * k, c.z * k];
+    const a = angleOf(c.x, c.z);
+    return polar(railR(a) - 2.6, a);
+  }
+  if (it.action === 'ferris') {
+    const [x, , z] = toWorld(it.place, 0, 0, 2.6);
+    return [x, z];
   }
   return null;
 }
@@ -341,6 +430,9 @@ export const ACTIVITIES: { key: string; label: string; emoji: string }[] = [
   { key: 'bridge', label: 'Stand on the bridge', emoji: '🌉' },
   { key: 'car', label: 'Go for a drive', emoji: '🚗' },
   { key: 'bike', label: 'Ride the bike for two', emoji: '🚲' },
+  { key: 'horse', label: 'Ride the horse', emoji: '🐴' },
+  { key: 'speedboat', label: 'Drive a speedboat', emoji: '🚤' },
+  { key: 'race', label: 'Finish a boat race', emoji: '🏁' },
   { key: 'train', label: 'Ride the train', emoji: '🚂' },
   { key: 'ferris', label: 'Ride the Ferris wheel', emoji: '🎡' },
   { key: 'cottage', label: 'Visit our home', emoji: '🏡' },
@@ -352,19 +444,28 @@ export const ACTIVITIES: { key: string; label: string; emoji: string }[] = [
   { key: 'bunnies', label: 'Pet the bunnies', emoji: '🐰' },
   { key: 'boutique', label: 'Try on outfits', emoji: '👗' },
   { key: 'hug', label: 'Hug in our world', emoji: '🤗' },
+  { key: 'kiss', label: 'Kiss in our world', emoji: '💋' },
 ];
 export const ACTIVITY_POINTS = 3;
 export const TOGETHER_POINTS = 5;
 /** Points key for an interactable ('home:sofa' → 'home-sofa'), or null if it gives none. */
 export function activityKey(key: string): string | null {
-  const k = key.replace(':', '-');
+  const k = key === 'boatA' || key === 'boatB' ? 'speedboat' : key.replace(':', '-');
   return ACTIVITIES.some((a) => a.key === k) ? k : null;
+}
+
+/** On the jetty (which sticks out past the shore)? */
+export function onDock(x: number, z: number, pad = 0): boolean {
+  const [lx, lz] = toLocal(DOCK, x, z);
+  return Math.abs(lx) < 1.15 + pad && lz > -3 && lz < DOCK.length + pad;
 }
 
 /** Push a point out of everything solid and keep it inside the area. */
 export function collide(area: Area, x: number, z: number, list: Interactable[], treehouse?: Placement, self = PLAYER_RADIUS, skip?: string): [number, number] {
   for (const it of list) {
     if (!it.radius || it.key === skip) continue;
+    // land and sea things don't bump into each other
+    if (it.vehicle && VEHICLES[it.key]?.water) continue;
     const r = it.radius * it.place.size + self;
     const dx = x - it.place.x;
     const dz = z - it.place.z;
@@ -375,8 +476,12 @@ export function collide(area: Area, x: number, z: number, list: Interactable[], 
     }
   }
   if (area === 'out') {
-    const d = Math.hypot(x, z);
-    if (d > ISLAND_RADIUS) [x, z] = [(x / d) * ISLAND_RADIUS, (z / d) * ISLAND_RADIUS];
+    // stay on land (the jetty counts as land)
+    const margin = 1.2 + self;
+    if (inland(x, z) < margin && !onDock(x, z)) {
+      const a = angleOf(x, z);
+      [x, z] = polar(coastR(a) - margin, a);
+    }
   } else if (area === 'home') {
     x = Math.max(HOME_ORIGIN[0] - HOME_HALF[0], Math.min(HOME_ORIGIN[0] + HOME_HALF[0], x));
     z = Math.max(HOME_ORIGIN[2] - HOME_HALF[1], Math.min(HOME_ORIGIN[2] + HOME_HALF[1], z));
@@ -386,6 +491,32 @@ export function collide(area: Area, x: number, z: number, list: Interactable[], 
     const dz = z - treehouse.z;
     const d = Math.hypot(dx, dz);
     if (d > max) [x, z] = [treehouse.x + (dx / d) * max, treehouse.z + (dz / d) * max];
+  }
+  return [x, z];
+}
+
+/** Keep a boat in open water: off the beach, clear of the jetty, not too far out. */
+export function collideWater(x: number, z: number, self: number, others: { x: number; z: number; r: number }[]): [number, number] {
+  for (const o of others) {
+    const dx = x - o.x;
+    const dz = z - o.z;
+    const d = Math.hypot(dx, dz);
+    const r = o.r + self;
+    if (d < r && d > 1e-4) [x, z] = [o.x + (dx / d) * r, o.z + (dz / d) * r];
+  }
+  const a = angleOf(x, z);
+  const off = -inland(x, z);
+  if (off < 2.5 + self) [x, z] = polar(coastR(a) + 2.5 + self, a);
+  else if (off > 34) [x, z] = polar(coastR(a) + 34, a);
+  // the jetty
+  const [lx, lz] = toLocal(DOCK, x, z);
+  const half = 1.15 + self;
+  if (Math.abs(lx) < half && lz > -3 && lz < DOCK.length + self) {
+    const nx = Math.sign(lx || 1) * half;
+    const c = Math.cos(DOCK.rot);
+    const s = Math.sin(DOCK.rot);
+    x = DOCK.x + nx * c + lz * s;
+    z = DOCK.z - nx * s + lz * c;
   }
   return [x, z];
 }

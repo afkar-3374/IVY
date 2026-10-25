@@ -202,8 +202,9 @@ const Swing: React.FC<BuildProps> = ({ busy }) => {
     <group>
       {[-1.1, 1.1].map((x) => (
         <group key={x} position={[x, 0, 0]}>
-          <Cyl a={[0.06, 0.07, 2.7, 6]} p={[0, 1.3, 0.45]} r={[0.33, 0, 0]} c={WOOD_DARK} />
-          <Cyl a={[0.06, 0.07, 2.7, 6]} p={[0, 1.3, -0.45]} r={[-0.33, 0, 0]} c={WOOD_DARK} />
+          {/* A-frame: feet apart on the ground, tops meeting at the crossbar */}
+          <Cyl a={[0.06, 0.07, 2.7, 6]} p={[0, 1.3, 0.45]} r={[-0.33, 0, 0]} c={WOOD_DARK} />
+          <Cyl a={[0.06, 0.07, 2.7, 6]} p={[0, 1.3, -0.45]} r={[0.33, 0, 0]} c={WOOD_DARK} />
         </group>
       ))}
       <Cyl a={[0.07, 0.07, 2.5, 8]} p={[0, SWING_PIVOT + 0.05, 0]} r={[0, 0, Math.PI / 2]} c={WOOD} />
