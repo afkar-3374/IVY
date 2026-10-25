@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Droplets, Sparkles, Star, Flower2, Trophy, Flame, Heart } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Droplets, Sparkles, Star, Flower2, Trophy, Flame, Heart, DoorOpen } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useGameStore } from '../store/useGameStore';
 import { gardenLevel, sumBy, wateringStreak } from '../utils/scores';
@@ -23,6 +24,7 @@ function phaseFor(hour: number): Phase {
 
 /** The shared love garden: grows with all-time love points, starry at night. */
 const GardenPage: React.FC = () => {
+  const navigate = useNavigate();
   const me = useAuthStore((s) => s.user);
   const partner = useAuthStore((s) => s.getPartnerProfile());
   const partnerName = me?.nickname || partner.display_name;
@@ -142,9 +144,16 @@ const GardenPage: React.FC = () => {
             <span className="hidden sm:inline">{partnerOnline ? `${partnerName} is here` : 'Send a tap'}</span>
           </button>
 
-          <p className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-[11px] font-medium text-white/90 drop-shadow whitespace-nowrap">
+          <p className="pointer-events-none absolute bottom-3 left-3 text-[11px] font-medium text-white/90 drop-shadow whitespace-nowrap hidden sm:block">
             Tap the tree or a flower ✨
           </p>
+          {/* Step inside: the 3D world */}
+          <button
+            onClick={() => navigate('/world')}
+            className="absolute bottom-3 right-3 btn-gloss rounded-full pl-3.5 pr-4 py-2.5 text-sm font-semibold flex items-center gap-1.5 shadow-xl active:scale-95 transition-transform"
+          >
+            <DoorOpen className="w-4 h-4" /> Enter our world
+          </button>
 
           <AnimatePresence>
             {levelUp && (

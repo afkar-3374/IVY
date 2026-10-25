@@ -15,6 +15,7 @@ const UsPage = lazy(() => import('../pages/UsPage'));
 const LovePage = lazy(() => import('../pages/LovePage'));
 const PlayPage = lazy(() => import('../pages/PlayPage'));
 const GardenPage = lazy(() => import('../pages/GardenPage'));
+const WorldPage = lazy(() => import('../pages/WorldPage'));
 
 export const AppRouter: React.FC = () => {
   const isUnlocked = useAuthStore((state) => state.isAuthenticated && state.isUnlocked);
@@ -43,6 +44,7 @@ export const AppRouter: React.FC = () => {
           <Route path="/love" element={<LovePage />} />
           <Route path="/play" element={<PlayPage />} />
           <Route path="/garden" element={<GardenPage />} />
+          <Route path="/world" element={<WorldPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/chat/info" element={<ChatInfoPage />} />
           <Route path="/search" element={<SearchPage />} />

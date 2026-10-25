@@ -28,7 +28,14 @@ export interface GardenBuild {
   built_by: string;
   cost: number;
   created_at: string;
+  /** Spot in the 3D world (null = the item's default spot) */
+  x?: number | null;
+  z?: number | null;
+  rot?: number;
+  size?: number;
 }
+
+export type BuildLayout = Pick<GardenBuild, 'x' | 'z' | 'rot' | 'size'>;
 
 export interface TicTacToe {
   round: number;
@@ -178,8 +185,16 @@ class GameService {
     if (error && error.code !== '23505') throw new Error(error.message);
   }
 
+  /** Move, turn or resize a build in the world. */
+  async place(item: string, layout: BuildLayout): Promise<void> {
+    if (!supabase) return;
+    const { error } = await supabase.from('garden_builds').update(layout).eq('item', item);
+    if (error) throw new Error(error.message);
+  }
+
   subscribe(handlers: {
     onBuild: (row: GardenBuild) => void;
+    onBuildMoved: (row: GardenBuild) => void;
     onPoint: (row: PointRow) => void;
     onAnswer: () => void;
     onBoard: (board: TicTacToe) => void;
@@ -191,6 +206,7 @@ class GameService {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'love_points' }, (p) => handlers.onPoint(p.new as PointRow))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_answers' }, () => handlers.onAnswer())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'garden_builds' }, (p) => handlers.onBuild(p.new as GardenBuild))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'garden_builds' }, (p) => handlers.onBuildMoved(p.new as GardenBuild))
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tic_tac_toe' }, (p) => handlers.onBoard(p.new as TicTacToe))
       .subscribe();
     return () => {

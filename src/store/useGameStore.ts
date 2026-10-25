@@ -3,6 +3,7 @@ import {
   gameService,
   type DailyGame,
   type GameAnswer,
+  type BuildLayout,
   type GardenBuild,
   type PointRow,
   type PointSource,
@@ -22,6 +23,8 @@ interface GameState {
   justBuilt: string | null;
   loaded: boolean;
   build: (item: string, cost: number) => Promise<boolean>;
+  /** Move/turn/resize a build in the world; `save: false` only updates the screen (while dragging) */
+  place: (item: string, layout: BuildLayout, save?: boolean) => Promise<void>;
   init: () => () => void;
   award: (source: PointSource, points: number, ref: string) => Promise<void>;
   loadAnswers: (game: DailyGame, roundKeys: string[]) => Promise<void>;
@@ -52,6 +55,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         const me = useAuthStore.getState().user?.id;
         if (row.built_by !== me) useUIStore.getState().addToast('Something new was built in your garden 🏗️💞', 'success');
       },
+      onBuildMoved: (row) => set((s) => ({ builds: s.builds.map((b) => (b.item === row.item ? { ...b, ...row } : b)) })),
       onPoint: (row) => set((s) => (s.points.some((p) => p.id === row.id || (p.ref === row.ref && p.user_id === row.user_id))
         ? { points: s.points.map((p) => (p.ref === row.ref && p.user_id === row.user_id ? row : p)) }
         : { points: [row, ...s.points] })),
@@ -94,6 +98,17 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   refreshBoard: async () => set({ board: await gameService.getBoard() }),
+
+  place: async (item, layout, save = true) => {
+    set((s) => ({ builds: s.builds.map((b) => (b.item === item ? { ...b, ...layout } : b)) }));
+    if (!save) return;
+    try {
+      await gameService.place(item, layout);
+    } catch (err) {
+      logger.error('Unable to move build:', err);
+      useUIStore.getState().addToast('Could not save the new spot — check your connection', 'error');
+    }
+  },
 
   build: async (item, cost) => {
     const me = useAuthStore.getState().user?.id;
