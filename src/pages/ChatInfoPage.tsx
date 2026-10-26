@@ -134,33 +134,24 @@ const ChatInfoPage: React.FC = () => {
           "{partnerUser.about || 'Together forever ❤️'}"
         </p>
 
-        {/* Quick Action Buttons */}
-        <div className="flex items-center justify-center gap-2 flex-wrap">
-          <button
-            onClick={() => {
-              if (currentUser && partnerUser) {
-                useCallStore.getState().startCall(currentUser.id, partnerUser.id, 'audio');
-              }
-            }}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[#C95565] text-white shadow-soft text-xs font-bold active-scale hover:bg-[#B34757] transition-colors"
-          >
-            <Phone className="w-4 h-4" />
-            <span>Voice Call</span>
-          </button>
-          <button
-            onClick={() => navigate('/search')}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white dark:bg-[#1E1D24] shadow-soft border border-stone-100 dark:border-stone-800 text-xs font-bold text-stone-800 dark:text-stone-200 active-scale"
-          >
-            <Search className="w-4 h-4 text-[#C95565]" />
-            <span>Search</span>
-          </button>
-          <button
-            onClick={() => navigate('/profile')}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white dark:bg-[#1E1D24] shadow-soft border border-stone-100 dark:border-stone-800 text-xs font-bold text-stone-800 dark:text-stone-200 active-scale"
-          >
-            <Palette className="w-4 h-4 text-[#C95565]" />
-            <span>Theme</span>
-          </button>
+        {/* Quick actions, like a phone's contact screen */}
+        <div className="grid grid-cols-4 gap-2 w-full max-w-sm mx-auto">
+          {[
+            { label: 'Audio', icon: Phone, onClick: () => currentUser && partnerUser && useCallStore.getState().startCall(currentUser.id, partnerUser.id, 'audio') },
+            { label: 'Video', icon: Video, onClick: () => currentUser && partnerUser && useCallStore.getState().startCall(currentUser.id, partnerUser.id, 'video') },
+            { label: 'Search', icon: Search, onClick: () => navigate('/search') },
+            { label: 'Theme', icon: Palette, onClick: () => navigate('/profile') },
+          ].map(({ label, icon: Icon, onClick }) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => void onClick()}
+              className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-white dark:bg-[#1E1D24] shadow-soft border border-stone-100 dark:border-stone-800 text-[11px] font-bold text-stone-700 dark:text-stone-200 active-scale"
+            >
+              <Icon className="w-5 h-5 text-[#C95565]" />
+              <span>{label}</span>
+            </button>
+          ))}
         </div>
       </div>
 

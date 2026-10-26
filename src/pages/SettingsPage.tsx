@@ -76,7 +76,7 @@ const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-full bg-[#FDF8F6] dark:bg-[#16151A] pb-24">
+    <div className="flex-1 flex flex-col min-h-full bg-[#FDF8F6] dark:bg-[#16151A] pb-[calc(7rem+var(--safe-bottom))] lg:pb-8">
       {/* Header */}
       <div className="p-4 flex items-center justify-between bg-white dark:bg-[#1E1D24] shadow-soft border-b border-stone-100 dark:border-stone-800">
         <button

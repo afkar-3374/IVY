@@ -26,7 +26,7 @@ const GardenTeaser: React.FC = () => {
 };
 
 const UsPage: React.FC = () => (
-  <div className="flex-1 w-full max-w-5xl mx-auto px-4 pt-5 pb-28 lg:px-8 lg:pt-8 lg:pb-10">
+  <div className="flex-1 w-full max-w-5xl mx-auto px-4 pt-5 pb-[calc(7rem+var(--safe-bottom))] lg:px-8 lg:pt-8 lg:pb-10">
     <h1 className="font-serif italic text-4xl lg:text-5xl text-stone-800 dark:text-stone-100 mb-4 lg:mb-6">Just <span className="text-gradient pr-1">us</span> 💞</h1>
     <div className="grid gap-4 lg:grid-cols-2 lg:gap-6 items-start">
       <div className="flex flex-col gap-4 lg:gap-6">

@@ -123,7 +123,7 @@ const LovePage: React.FC = () => {
     : 'Hold the heart together for a hug';
 
   return (
-    <div className="flex-1 flex flex-col items-center px-5 pt-6 pb-28 lg:pb-8 gap-6 select-none">
+    <div className="flex-1 flex flex-col items-center px-5 pt-6 pb-[calc(7rem+var(--safe-bottom))] lg:pb-8 gap-6 select-none">
       <div className="text-center">
         <h1 className="font-cute text-3xl font-semibold text-stone-800 dark:text-stone-100">Virtual hug</h1>
         <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">Both of you hold the heart at the same time</p>

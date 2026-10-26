@@ -95,7 +95,7 @@ const GardenPage: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 pt-5 pb-28 lg:px-8 lg:pt-8 lg:pb-10">
+    <div className="w-full max-w-6xl mx-auto px-4 pt-5 pb-[calc(7rem+var(--safe-bottom))] lg:px-8 lg:pt-8 lg:pb-10">
       <div className="mb-5">
         <h1 className="font-serif italic text-4xl lg:text-5xl text-stone-800 dark:text-stone-100">
           Our <span className="text-gradient pr-1">garden</span>

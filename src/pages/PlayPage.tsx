@@ -10,7 +10,7 @@ import { cardClass } from '../components/Couple/CoupleCards';
 
 /** Couple games and the weekly scoreboard. */
 const PlayPage: React.FC = () => (
-  <div className="w-full max-w-5xl mx-auto px-4 pt-5 pb-28 lg:px-8 lg:pt-8 lg:pb-10">
+  <div className="w-full max-w-5xl mx-auto px-4 pt-5 pb-[calc(7rem+var(--safe-bottom))] lg:px-8 lg:pt-8 lg:pb-10">
     <h1 className="font-serif italic text-4xl text-stone-800 dark:text-stone-100">Play together</h1>
     <p className="text-sm text-stone-500 dark:text-stone-400 mt-1 mb-5">New questions every day · points grow your garden 🌱</p>
 

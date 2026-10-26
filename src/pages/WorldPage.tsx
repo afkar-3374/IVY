@@ -313,12 +313,12 @@ const WorldPage: React.FC = () => {
             </button>
             {mode === 'play' && (
               <>
-                <div className={`${glass} rounded-full px-3 py-1 text-[11px] font-medium text-stone-600 dark:text-stone-200`}>
+                <div className={`${glass} whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-stone-600 dark:text-stone-200`}>
                   {area === 'home' ? '🏡 Our home' : area === 'treehouse' ? '🌳 Tree house' : weatherLabel}
                 </div>
                 <button
                   onClick={() => useWorldUI.setState({ questsOpen: !questsOpen })}
-                  className={`pointer-events-auto ${glass} rounded-full px-3 py-1.5 text-[11px] font-semibold text-stone-700 dark:text-stone-100 flex items-center gap-1.5`}
+                  className={`pointer-events-auto ${glass} whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-semibold text-stone-700 dark:text-stone-100 flex items-center gap-1.5`}
                 >
                   <Target className="w-3.5 h-3.5 text-[#E05A74]" /> {doneCount}/{ACTIVITIES.length} today · +{earnedToday} 💗
                 </button>
@@ -358,17 +358,20 @@ const WorldPage: React.FC = () => {
                       }}
                       className={`pointer-events-auto ${glass} h-10 rounded-full px-3 flex items-center gap-1.5 text-sm font-semibold text-stone-700 dark:text-stone-100 active:scale-95`}
                       aria-label="Dressing room"
+                      title="Dressing room"
                     >
-                      <Shirt className="w-4 h-4" /> Dress
+                      <Shirt className="w-4 h-4" /> <span className="max-[399px]:hidden">Dress</span>
                     </button>
                     <button
                       onClick={() => {
                         if (seat) standUp(all, placements);
                         setMode('edit');
                       }}
+                      aria-label="Arrange builds"
+                      title="Arrange builds"
                       className={`pointer-events-auto ${glass} h-10 rounded-full px-3 flex items-center gap-1.5 text-sm font-semibold text-stone-700 dark:text-stone-100 active:scale-95`}
                     >
-                      <Move className="w-4 h-4" /> Arrange
+                      <Move className="w-4 h-4" /> <span className="max-[399px]:hidden">Arrange</span>
                     </button>
                   </>
                 )}

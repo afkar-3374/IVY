@@ -31,14 +31,16 @@ export const WeeklyScores: React.FC<{ compact?: boolean }> = ({ compact }) => {
 
   return (
     <div className={`${cardClass} p-5`}>
-      <div className="flex items-center justify-between mb-4">
-        <div>
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-wider text-[#E05A74]">This week</p>
           <p className="text-xs text-stone-400">{daysLeft} day{daysLeft === 1 ? '' : 's'} left · resets Monday</p>
         </div>
-        <div className="flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-500/10 text-amber-600 px-3 py-1 text-xs font-bold" title="Days in a row you both played">
-          <Flame className="w-3.5 h-3.5" /> {streak}-day streak
-        </div>
+        {streak > 0 && (
+          <div className="flex-shrink-0 whitespace-nowrap flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-500/10 text-amber-600 px-3 py-1 text-xs font-bold" title="Days in a row you both played">
+            <Flame className="w-3.5 h-3.5" /> {streak}-day streak
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-3">

@@ -5,8 +5,6 @@ import {
   PhoneOff,
   Mic,
   MicOff,
-  Volume2,
-  VolumeX,
   RefreshCw,
   AlertCircle,
   Wifi,
@@ -21,6 +19,7 @@ import {
 import { useCallStore } from '../../store/useCallStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { Avatar } from '../ui/Avatar';
+import { AudioRouteControl } from './AudioRouteControl';
 
 /* ─── Ringing pulse rings ──────────────────────────────────────── */
 const RingingRings: React.FC<{ color?: string }> = ({ color = '#C95565' }) => (
@@ -125,7 +124,6 @@ export const CallOverlay: React.FC = () => {
     callSeconds,
     isMuted,
     isVideoOff,
-    isSpeakerOn,
     connectionState,
     permissionError,
     acceptCall,
@@ -133,7 +131,6 @@ export const CallOverlay: React.FC = () => {
     endCall,
     toggleMute,
     toggleVideo,
-    toggleSpeaker,
     switchCamera,
     listenToSignaling,
     recoverAfterResume,
@@ -401,7 +398,7 @@ export const CallOverlay: React.FC = () => {
           <div className="flex items-center justify-around">
             <CallBtn onClick={toggleMute} icon={isMuted ? <MicOff /> : <Mic />} label={isMuted ? 'Unmute' : 'Mute'} active={isMuted} />
             <CallBtn onClick={endCall} icon={<PhoneOff />} label="End" danger size="lg" />
-            <CallBtn onClick={toggleSpeaker} icon={isSpeakerOn ? <Volume2 /> : <VolumeX />} label={isSpeakerOn ? 'Speaker' : 'Earpiece'} active={!isSpeakerOn} />
+            <AudioRouteControl renderButton={(p) => <CallBtn {...p} />} />
           </div>
         )}
         {isReconnecting && (
@@ -442,6 +439,7 @@ export const CallOverlay: React.FC = () => {
         ref={remoteVideoRef}
         autoPlay
         playsInline
+        muted /* sound plays through the audio element, so it can be routed */
         className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${
           remoteHasVideo && isConnected ? 'opacity-100' : 'opacity-0'
         }`}
@@ -657,12 +655,7 @@ export const CallOverlay: React.FC = () => {
                   active={isVideoOff}
                 />
                 <CallBtn onClick={endCall} icon={<PhoneOff />} label="End" danger size="lg" />
-                <CallBtn
-                  onClick={toggleSpeaker}
-                  icon={isSpeakerOn ? <Volume2 /> : <VolumeX />}
-                  label={isSpeakerOn ? 'Speaker' : 'Earpiece'}
-                  active={!isSpeakerOn}
-                />
+                <AudioRouteControl renderButton={(p) => <CallBtn {...p} />} />
                 <CallBtn
                   onClick={() => switchCamera()}
                   icon={<FlipHorizontal />}
@@ -725,7 +718,7 @@ export const CallOverlay: React.FC = () => {
   return (
     <>
       {/* Hidden audio element for remote audio (always active) */}
-      <audio id="ivy-remote-audio" ref={remoteAudioRef} autoPlay playsInline className="hidden" />
+      <audio id="ivy-remote-audio" data-call-audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
 
       {/* Permission Error Banner */}
       <AnimatePresence>

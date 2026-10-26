@@ -355,6 +355,27 @@ export class CallService {
     });
   }
 
+  /** Use another microphone (on Android this also moves the call's sound to that route). */
+  async switchMicrophone(deviceId: string): Promise<MediaStream | null> {
+    if (!this.localStream) return null;
+    const previous = this.localStream.getAudioTracks()[0];
+    const fresh = await navigator.mediaDevices.getUserMedia({
+      audio: { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    const track = fresh.getAudioTracks()[0];
+    if (!track) return null;
+    track.enabled = previous ? previous.enabled : true;
+
+    const sender = this.peerConnection?.getSenders().find((s) => s.track?.kind === 'audio');
+    if (sender) await sender.replaceTrack(track);
+    if (previous) {
+      this.localStream.removeTrack(previous);
+      previous.stop();
+    }
+    this.localStream.addTrack(track);
+    return this.localStream;
+  }
+
   async restartIce(): Promise<RTCSessionDescriptionInit | null> {
     if (!this.peerConnection) return null;
     try {

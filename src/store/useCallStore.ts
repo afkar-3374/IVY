@@ -6,6 +6,8 @@ import { logger } from '../services/logger/logger';
 import { ivyDb } from '../db/ivyDb';
 import { useAuthStore } from './useAuthStore';
 import { pushService } from '../services/pushService';
+import { callSounds } from '../services/callSounds';
+import { listAudioRoutes, preferredRoute, setOutputDevice, type AudioRoute } from '../services/audioRoutes';
 
 const CALL_TIMEOUT_SECONDS = 45; // Unanswered call timeout
 const RINGING_FALLBACK_SECONDS = 50; // Receiver stops ringing if the caller's end signal is lost
@@ -20,7 +22,9 @@ interface CallStoreState {
   facingMode: 'user' | 'environment';
   isMuted: boolean;
   isVideoOff: boolean;
-  isSpeakerOn: boolean;
+  /** Earpiece, speaker, Bluetooth... (empty when the browser picks the route itself, e.g. iPhone) */
+  audioRoutes: AudioRoute[];
+  audioRouteId: string | null;
   connectionState: RTCPeerConnectionState | null;
   permissionError: string | null;
   callHistory: CallHistoryRecord[];
@@ -32,7 +36,10 @@ interface CallStoreState {
   endCall: () => void;
   toggleMute: () => void;
   toggleVideo: () => void;
+  /** Earpiece ↔ speaker; with Bluetooth or a headset connected the screen shows a picker instead. */
   toggleSpeaker: () => void;
+  setAudioRoute: (id: string) => Promise<void>;
+  refreshAudioRoutes: () => Promise<void>;
   switchCamera: () => Promise<void>;
   listenToSignaling: (userId: string) => () => void;
   recoverAfterResume: () => void;
@@ -43,23 +50,24 @@ interface CallStoreState {
 let callTimerInterval: NodeJS.Timeout | null = null;
 let callTimeoutTimer: NodeJS.Timeout | null = null;
 let reconnectTimer: NodeJS.Timeout | null = null;
-let ringtoneAudio: HTMLAudioElement | null = null;
+const stopRingtone = () => callSounds.stop();
 
-const playRingtone = () => {
-  try {
-    if (!ringtoneAudio) {
-      ringtoneAudio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-      ringtoneAudio.loop = true;
-    }
-    ringtoneAudio.play().catch(() => {});
-  } catch {}
+let routesWatcher: (() => void) | null = null;
+
+/** Pick the starting route like a phone does and follow devices that connect or disconnect. */
+const startAudioRouting = (get: () => CallStoreState) => {
+  stopAudioRouting();
+  void get().refreshAudioRoutes();
+  const onChange = () => void get().refreshAudioRoutes();
+  navigator.mediaDevices?.addEventListener?.('devicechange', onChange);
+  routesWatcher = () => navigator.mediaDevices?.removeEventListener?.('devicechange', onChange);
 };
 
-const stopRingtone = () => {
-  if (ringtoneAudio) {
-    ringtoneAudio.pause();
-    ringtoneAudio.currentTime = 0;
-  }
+const NO_ROUTES = { audioRoutes: [] as AudioRoute[], audioRouteId: null };
+
+const stopAudioRouting = () => {
+  routesWatcher?.();
+  routesWatcher = null;
 };
 
 /** Post a call note into the chat as the signed-in partner. */
@@ -152,14 +160,14 @@ const watchConnection = (
           const conn = get().connectionState;
           if (curr && (conn === 'disconnected' || conn === 'failed')) {
             logger.warn('Reconnection timed out – terminating call');
-            stopRingtone();
+            callSounds.ended();
             clearAllTimers();
             const partnerId = curr.participant_id === curr.caller_id ? curr.receiver_id : curr.caller_id;
             void callService.sendSignal(partnerId, { type: 'end-call', senderId: curr.participant_id });
             logCallMessage(curr.call_type === 'video' ? 'Video call ended (Connection lost)' : 'Voice call ended (Connection lost)');
             addCallHistory(get, set, 'completed');
             callService.endCall();
-            set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, connectionState: null }));
+            set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, connectionState: null, ...NO_ROUTES }));
           }
         }, RECONNECT_TIMEOUT_SECONDS * 1000);
       }
@@ -178,7 +186,8 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
   facingMode: 'user',
   isMuted: false,
   isVideoOff: false,
-  isSpeakerOn: true,
+  audioRoutes: [],
+  audioRouteId: null,
   connectionState: null,
   permissionError: null,
   callHistory: [],
@@ -221,7 +230,8 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       permissionError: null,
     }));
 
-    playRingtone();
+    callSounds.ringback();
+    startAudioRouting(get);
 
     watchConnection(get, set as any);
     await callService.loadIceServers();
@@ -251,12 +261,12 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       const current = get().currentCall;
       if (current?.state === 'outgoing') {
         logger.info('Call timed out – no answer');
-        stopRingtone();
+        callSounds.ended();
         callService.sendSignal(receiverId, { type: 'end-call', senderId: callerId });
         logCallMessage(current.call_type === 'video' ? 'Missed video call' : 'Missed voice call');
         addCallHistory(get, set as any, 'missed');
         callService.endCall();
-        set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0 }));
+        set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, ...NO_ROUTES }));
       }
     }, CALL_TIMEOUT_SECONDS * 1000);
   },
@@ -287,7 +297,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
     callService.resetPendingCandidates();
     void callService.loadIceServers();
     set(() => ({ currentCall: newSession, callSeconds: 0, permissionError: null }));
-    playRingtone();
+    callSounds.ringtone();
 
     // Trigger system notification if app is hidden
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted' && document.hidden) {
@@ -310,7 +320,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
         stopRingtone();
         addCallHistory(get, set as any, 'missed');
         callService.endCall();
-        set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0 }));
+        set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, ...NO_ROUTES }));
       }
     }, RINGING_FALLBACK_SECONDS * 1000);
   },
@@ -370,6 +380,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
     }));
 
     startCallTimer(set as any);
+    startAudioRouting(get);
   },
 
   rejectCall: () => {
@@ -383,11 +394,11 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       addCallHistory(get, set as any, 'rejected');
     }
     callService.endCall();
-    set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0 }));
+    set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, ...NO_ROUTES }));
   },
 
   endCall: () => {
-    stopRingtone();
+    if (get().currentCall) callSounds.ended();
     clearAllTimers();
     const current = get().currentCall;
     const seconds = get().callSeconds;
@@ -407,7 +418,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
     }
 
     callService.endCall();
-    set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, connectionState: null }));
+    set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, connectionState: null, ...NO_ROUTES }));
   },
 
   toggleMute: () => {
@@ -423,15 +434,51 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
   },
 
   toggleSpeaker: () => {
-    const nextSpeaker = !get().isSpeakerOn;
-    set(() => ({ isSpeakerOn: nextSpeaker }));
-    // Note: Speaker API (setSinkId) is not universally supported; handle gracefully
+    const { audioRoutes, audioRouteId } = get();
+    const active = audioRoutes.find((r) => r.id === audioRouteId);
+    const target = active?.kind === 'speaker'
+      ? audioRoutes.find((r) => r.kind === 'earpiece') ?? audioRoutes.find((r) => r.kind !== 'speaker')
+      : audioRoutes.find((r) => r.kind === 'speaker');
+    if (target) void get().setAudioRoute(target.id);
+  },
+
+  setAudioRoute: async (id) => {
+    const route = get().audioRoutes.find((r) => r.id === id);
+    if (!route) return;
+    const previous = get().audioRouteId;
+    set(() => ({ audioRouteId: id }));
     try {
-      const remoteAudio = document.querySelector<HTMLAudioElement>('#ivy-remote-audio');
-      if (remoteAudio && 'setSinkId' in remoteAudio) {
-        (remoteAudio as any).setSinkId(nextSpeaker ? 'default' : 'communications');
+      if (route.via === 'output') {
+        await setOutputDevice(id);
+      } else {
+        const stream = await callService.switchMicrophone(id);
+        if (stream) set(() => ({ localStream: stream }));
       }
-    } catch {}
+    } catch (err) {
+      logger.warn('Unable to switch audio route:', err);
+      set(() => ({ audioRouteId: previous }));
+    }
+  },
+
+  refreshAudioRoutes: async () => {
+    const routes = await listAudioRoutes();
+    const current = get().currentCall;
+    if (!current) return;
+    const before = get().audioRoutes;
+    const activeId = get().audioRouteId;
+    set(() => ({ audioRoutes: routes }));
+
+    const isNew = (r: AudioRoute) => !before.some((b) => b.id === r.id);
+    const plugged = routes.find((r) => (r.kind === 'bluetooth' || r.kind === 'headset') && isNew(r));
+    if (!activeId || !routes.some((r) => r.id === activeId)) {
+      // First pick, or the device in use went away (e.g. Bluetooth turned off)
+      const pick = preferredRoute(routes, current.call_type === 'video');
+      if (pick) await get().setAudioRoute(pick.id);
+      else set(() => ({ audioRouteId: null }));
+    } else if (plugged && before.length > 0) {
+      // Earbuds connected mid-call: move the call to them, like a phone does
+      await get().setAudioRoute(plugged.id);
+    }
   },
 
   switchCamera: async () => {
@@ -473,24 +520,25 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
           stopRingtone();
           clearAllTimers();
           callService.endCall();
-          set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0 }));
+          set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, ...NO_ROUTES }));
         }
       } else if (event.type === 'ice-candidate') {
         await callService.addIceCandidate(event.candidate);
       } else if (event.type === 'busy') {
-        stopRingtone();
+        callSounds.busy();
         clearAllTimers();
         logCallMessage(`${current?.call_type === 'video' ? 'Video' : 'Voice'} call – User busy`);
         addCallHistory(get, set as any, 'busy');
         callService.endCall();
-        set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0 }));
+        set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, ...NO_ROUTES }));
       } else if (event.type === 'end-call' || event.type === 'reject-call') {
-        stopRingtone();
+        if (current && current.state !== 'incoming') callSounds.ended();
+        else stopRingtone();
         clearAllTimers();
 
         addCallHistory(get, set as any, event.type === 'reject-call' ? 'rejected' : 'completed');
         callService.endCall();
-        set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, connectionState: null }));
+        set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, connectionState: null, ...NO_ROUTES }));
       }
     });
   },
@@ -503,7 +551,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       stopRingtone();
       clearAllTimers();
       callService.endCall();
-      set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, connectionState: null }));
+      set(() => ({ currentCall: null, localStream: null, remoteStream: null, callSeconds: 0, connectionState: null, ...NO_ROUTES }));
     }
   },
 
@@ -518,3 +566,8 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
     }
   },
 }));
+
+// Stop following audio devices once a call is over
+useCallStore.subscribe((state, prev) => {
+  if (prev.currentCall && !state.currentCall) stopAudioRouting();
+});
